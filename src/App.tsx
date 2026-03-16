@@ -108,6 +108,7 @@ function migrateData(raw: Record<string, unknown>): ResumeData {
 		phone: rawPersonal.phone ?? defaultPersonal.phone,
 		email: rawPersonal.email ?? defaultPersonal.email,
 		location: rawPersonal.location ?? defaultPersonal.location,
+		availability: rawPersonal.availability ?? defaultPersonal.availability,
 		github: rawPersonal.github ?? defaultPersonal.github,
 		website: rawPersonal.website ?? defaultPersonal.website,
 	};
@@ -158,7 +159,15 @@ function App() {
 		const saved = localStorage.getItem(THEME_STORAGE_KEY);
 		if (
 			saved &&
-			["classic", "minimal", "executive", "fresh", "elegant", "rose", "aurora"].includes(saved)
+			[
+				"classic",
+				"minimal",
+				"executive",
+				"fresh",
+				"elegant",
+				"rose",
+				"aurora",
+			].includes(saved)
 		) {
 			return saved as ThemeId;
 		}
@@ -331,6 +340,7 @@ function App() {
 							<span className="leading-none">Resume</span>
 						</div>
 
+						{/* biome-ignore lint/a11y/useAnchorContent: none*/}
 						<a
 							href="https://github.com/dogxii/iResume"
 							target="_blank"

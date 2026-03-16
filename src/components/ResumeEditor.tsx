@@ -250,6 +250,12 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 						placeholder="例：北京, 中国"
 					/>
 					<InputGroup
+						label="到岗情况"
+						value={data.personal.availability}
+						onChange={(v) => updatePersonal("availability", v)}
+						placeholder="例：4天/周 3个月+"
+					/>
+					<InputGroup
 						label="Github (不带 https://)"
 						value={data.personal.github}
 						onChange={(v) => updatePersonal("github", v)}

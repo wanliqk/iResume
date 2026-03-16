@@ -1,4 +1,12 @@
-import { ExternalLink, Github, Globe, Mail, MapPin, Phone } from "lucide-react";
+import {
+	Calendar,
+	ExternalLink,
+	Github,
+	Globe,
+	Mail,
+	MapPin,
+	Phone,
+} from "lucide-react";
 import React from "react";
 import { themes } from "../data/themes";
 import type { ResumeData, SectionKey } from "../types/resume";
@@ -21,6 +29,7 @@ const ResumePreview = ({ data, themeId = "classic" }: ResumePreviewProps) => {
 	const hasPhone = data.personal.phone.trim();
 	const hasEmail = data.personal.email.trim();
 	const hasLocation = data.personal.location.trim();
+	const hasAvailability = data.personal.availability.trim();
 	const hasGithub = data.personal.github.trim();
 	const hasWebsite = data.personal.website.trim();
 	const hasContactInfo = hasPhone || hasEmail || hasLocation;
@@ -92,9 +101,7 @@ const ResumePreview = ({ data, themeId = "classic" }: ResumePreviewProps) => {
 			case "double-line":
 				return (
 					<div className="mb-3">
-						<h2 className={`text-base font-bold ${c.heading} pb-1`}>
-							{title}
-						</h2>
+						<h2 className={`text-base font-bold ${c.heading} pb-1`}>{title}</h2>
 						<div className="flex flex-col gap-px">
 							<div className={`h-[2px] ${c.primaryBorder} border-t-2`} />
 							<div className={`h-px ${c.divider} border-t`} />
@@ -124,6 +131,11 @@ const ResumePreview = ({ data, themeId = "classic" }: ResumePreviewProps) => {
 			});
 		if (hasLocation)
 			items.push({ icon: <MapPin size={13} />, text: data.personal.location });
+		if (hasAvailability)
+			items.push({
+				icon: <Calendar size={13} />,
+				text: data.personal.availability,
+			});
 
 		switch (theme.contactStyle) {
 			case "icons-right":
@@ -327,7 +339,9 @@ const ResumePreview = ({ data, themeId = "classic" }: ResumePreviewProps) => {
 				return (
 					<header className="mb-5 -mx-8 -mt-8 md:-mx-10 md:-mt-10">
 						{/* 深色 Banner */}
-						<div className={`${theme.bannerBg ?? "bg-slate-800"} text-white px-8 py-6 md:px-10`}>
+						<div
+							className={`${theme.bannerBg ?? "bg-slate-800"} text-white px-8 py-6 md:px-10`}
+						>
 							<div className="flex justify-between items-end">
 								<div>
 									{data.personal.name.trim() && (
@@ -336,7 +350,9 @@ const ResumePreview = ({ data, themeId = "classic" }: ResumePreviewProps) => {
 										</h1>
 									)}
 									{data.personal.title.trim() && (
-										<p className={`${theme.bannerAccent ?? "text-amber-400"} font-medium mt-1 text-lg`}>
+										<p
+											className={`${theme.bannerAccent ?? "text-amber-400"} font-medium mt-1 text-lg`}
+										>
 											{data.personal.title}
 										</p>
 									)}
@@ -364,6 +380,12 @@ const ResumePreview = ({ data, themeId = "classic" }: ResumePreviewProps) => {
 											<div className="flex items-center justify-end gap-2">
 												<span>{data.personal.location}</span>
 												{theme.showContactIcons && <MapPin size={13} />}
+											</div>
+										)}
+										{hasAvailability && (
+											<div className="flex items-center justify-end gap-2">
+												<span>{data.personal.availability}</span>
+												{theme.showContactIcons && <Calendar size={13} />}
 											</div>
 										)}
 									</div>
