@@ -2,15 +2,15 @@ import {
 	Clock3,
 	Copy,
 	FilePlus2,
-	FileText,
 	Github,
 	LayoutGrid,
 	Plus,
 	Tags,
 	Trash2,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { normalizeResumeTags, type ResumeDocument } from "../data/resumeLibrary";
+import ResumePreview from "./ResumePreview";
 
 interface CreateResumeInput {
 	name: string;
@@ -57,44 +57,59 @@ const BrandMark = () => (
 	</div>
 );
 
-const ResumeCard = ({
+const inertProps = { inert: true };
+
+const ResumeThumbnail = ({
 	document,
-	canDelete,
-	onOpen,
-	onDuplicate,
-	onDelete,
-}: ResumeCardProps) => (
-	<article className="group flex min-h-[204px] flex-col rounded-lg border border-slate-200/70 bg-white/70 p-4 transition-colors hover:border-slate-300 hover:bg-white/85">
-		<button
-			type="button"
-			onClick={onOpen}
-			className="flex min-w-0 flex-1 flex-col text-left"
+	className = "",
+	scale = 0.17,
+}: {
+	document: ResumeDocument;
+	className?: string;
+	scale?: number;
+}) => (
+	<div
+		{...inertProps}
+		aria-hidden="true"
+		className={`relative shrink-0 overflow-hidden rounded-md border border-slate-200/80 bg-white ${className}`}
+	>
+		<div
+			className="absolute left-1/2 top-0 w-[210mm]"
+			style={{
+				marginLeft: "-105mm",
+				transform: `scale(${scale})`,
+				transformOrigin: "top center",
+			}}
 		>
-			<div className="mb-4 flex items-start justify-between gap-3">
-				<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100/80 text-slate-400 transition-colors group-hover:text-slate-600">
-					<FileText size={17} />
-				</div>
-				<span className="rounded-full border border-slate-200/70 px-2 py-0.5 font-mono text-[11px] text-slate-400">
-					v{document.version}
-				</span>
-			</div>
+			<ResumePreview
+				data={document.data}
+				themeId={document.appearance.themeId}
+				fontSizePt={document.appearance.fontSizePt}
+				pageMarginMm={document.appearance.pageMarginMm}
+				sectionIcons={document.appearance.sectionIcons}
+				minPageCount={1}
+			/>
+		</div>
+	</div>
+);
 
-			<h2 className="line-clamp-2 text-base font-bold leading-snug text-slate-900">
-				{document.name}
-			</h2>
-			<div className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
+const DocumentMeta = ({ document }: { document: ResumeDocument }) => (
+	<>
+		<div className="flex items-center gap-2 text-xs text-slate-400">
+			<span className="font-mono">v{document.version}</span>
+			<span className="h-1 w-1 rounded-full bg-slate-300" />
+			<span className="inline-flex items-center gap-1">
 				<Clock3 size={13} />
-				<span>{formatUpdatedAt(document.updatedAt)}</span>
-			</div>
-		</button>
-
-		<div className="mt-4 min-h-7">
+				{formatUpdatedAt(document.updatedAt)}
+			</span>
+		</div>
+		<div className="mt-2 min-h-6">
 			{document.tags.length > 0 ? (
 				<div className="flex flex-wrap gap-1.5">
 					{document.tags.map((tag) => (
 						<span
 							key={tag}
-							className="rounded border border-slate-200/70 bg-slate-50/80 px-1.5 py-0.5 text-[11px] font-medium text-slate-400"
+							className="rounded border border-slate-200/70 bg-slate-50/70 px-1.5 py-0.5 text-[11px] font-medium text-slate-400"
 						>
 							{tag}
 						</span>
@@ -104,6 +119,73 @@ const ResumeCard = ({
 				<span className="text-xs text-slate-300">未添加标签</span>
 			)}
 		</div>
+	</>
+);
+
+const RecentResumePanel = ({
+	document,
+	onOpen,
+}: {
+	document: ResumeDocument;
+	onOpen: () => void;
+}) => (
+	<button
+		type="button"
+		onClick={onOpen}
+		className="grid min-h-[268px] rounded-lg border border-slate-200/70 bg-white/55 p-4 text-left transition-colors hover:border-slate-300 hover:bg-white/75 sm:grid-cols-[minmax(0,1fr)_190px] sm:gap-5"
+	>
+		<div className="flex min-w-0 flex-col justify-between">
+			<div>
+				<p className="mb-2 text-xs font-semibold text-slate-400">最近修改</p>
+				<h2 className="line-clamp-2 text-xl font-bold tracking-tight text-slate-900">
+					{document.name}
+				</h2>
+				<div className="mt-3">
+					<DocumentMeta document={document} />
+				</div>
+			</div>
+			<span className="mt-5 inline-flex w-fit rounded-md px-2 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800">
+				继续编辑
+			</span>
+		</div>
+		<ResumeThumbnail
+			document={document}
+			className="mx-auto mt-4 h-[252px] w-[178px] sm:mt-0"
+			scale={0.225}
+		/>
+	</button>
+);
+
+const ResumeCard = ({
+	document,
+	canDelete,
+	onOpen,
+	onDuplicate,
+	onDelete,
+}: ResumeCardProps) => (
+	<article className="group flex min-h-[332px] flex-col rounded-lg border border-slate-200/70 bg-white/60 p-3 transition-colors hover:border-slate-300 hover:bg-white/80">
+		<button
+			type="button"
+			onClick={onOpen}
+			className="flex min-w-0 flex-1 flex-col items-center text-left"
+		>
+			<ResumeThumbnail document={document} className="h-48 w-[136px]" />
+
+			<div className="mt-4 w-full min-w-0">
+				<div className="mb-2 flex items-start justify-between gap-3">
+					<h2 className="line-clamp-2 text-base font-bold leading-snug text-slate-900">
+						{document.name}
+					</h2>
+					<span className="shrink-0 rounded-full border border-slate-200/70 px-2 py-0.5 font-mono text-[11px] text-slate-400">
+						v{document.version}
+					</span>
+				</div>
+				<div className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+					<Clock3 size={13} />
+					<span>{formatUpdatedAt(document.updatedAt)}</span>
+				</div>
+			</div>
+		</button>
 
 		<div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
 			<button
@@ -142,7 +224,7 @@ const CreateResumeCard = ({ onClick }: { onClick: () => void }) => (
 	<button
 		type="button"
 		onClick={onClick}
-		className="group flex min-h-[204px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white/35 p-5 text-slate-400 transition-colors hover:border-slate-400 hover:bg-white/60 hover:text-slate-600"
+		className="group flex min-h-[268px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white/30 p-5 text-slate-400 transition-colors hover:border-slate-400 hover:bg-white/55 hover:text-slate-600"
 	>
 		<span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-dashed border-current bg-white/40">
 			<Plus size={22} />
@@ -252,6 +334,15 @@ const ResumeManager = ({
 }: ResumeManagerProps) => {
 	const [creating, setCreating] = useState(false);
 	const defaultName = `新简历 ${documents.length + 1}`;
+	const sortedDocuments = useMemo(
+		() =>
+			[...documents].sort(
+				(a, b) =>
+					new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+			),
+		[documents],
+	);
+	const recentDocument = sortedDocuments[0];
 
 	return (
 		<div className="min-h-screen bg-slate-100 font-sans text-slate-900">
@@ -292,9 +383,24 @@ const ResumeManager = ({
 					</span>
 				</div>
 
-				<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+				<div className="mb-8 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
 					<CreateResumeCard onClick={() => setCreating(true)} />
-					{documents.map((document) => (
+					{recentDocument && (
+						<RecentResumePanel
+							document={recentDocument}
+							onOpen={() => onOpen(recentDocument.id)}
+						/>
+					)}
+				</div>
+
+				<div className="mb-3 flex items-center justify-between">
+					<h2 className="text-sm font-bold text-slate-700">全部简历</h2>
+					<span className="text-xs text-slate-400">
+						{sortedDocuments.length} 份
+					</span>
+				</div>
+				<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+					{sortedDocuments.map((document) => (
 						<ResumeCard
 							key={document.id}
 							document={document}
