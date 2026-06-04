@@ -1,4 +1,5 @@
 import type React from "react";
+import { normalizeSafeUrl } from "./url";
 
 /**
  * 解析行内 Markdown 语法，支持：
@@ -25,16 +26,21 @@ export function parseInline(text: string): React.ReactNode[] {
 			parts.push(<strong key={match.index}>{match[1]}</strong>);
 		} else if (match[2] !== undefined && match[3] !== undefined) {
 			// [文字](url)
+			const href = normalizeSafeUrl(match[3]);
 			parts.push(
-				<a
-					key={match.index}
-					href={match[3]}
-					target="_blank"
-					rel="noreferrer"
-					className="text-blue-600 hover:underline"
-				>
-					{match[2]}
-				</a>,
+				href ? (
+					<a
+						key={match.index}
+						href={href}
+						target="_blank"
+						rel="noreferrer"
+						className="text-blue-600 hover:underline"
+					>
+						{match[2]}
+					</a>
+				) : (
+					match[2]
+				),
 			);
 		}
 

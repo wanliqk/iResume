@@ -1,14 +1,21 @@
-import { Check, Palette } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Check, Palette, Star } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { themeIds, themes } from "../data/themes";
 import type { ThemeId } from "../types/theme";
 
 interface ThemePickerProps {
 	current: ThemeId;
+	favoriteThemeIds: ThemeId[];
 	onChange: (id: ThemeId) => void;
+	onToggleFavorite: (id: ThemeId) => void;
 }
 
-const ThemePicker = ({ current, onChange }: ThemePickerProps) => {
+const ThemePicker = ({
+	current,
+	favoriteThemeIds,
+	onChange,
+	onToggleFavorite,
+}: ThemePickerProps) => {
 	const [open, setOpen] = useState(false);
 	const panelRef = useRef<HTMLDivElement>(null);
 	const buttonRef = useRef<HTMLButtonElement>(null);
@@ -41,6 +48,13 @@ const ThemePicker = ({ current, onChange }: ThemePickerProps) => {
 	}, [open]);
 
 	const currentTheme = themes[current];
+	const orderedThemeIds = useMemo(() => {
+		const favoriteSet = new Set(favoriteThemeIds);
+		return [
+			...favoriteThemeIds,
+			...themeIds.filter((id) => !favoriteSet.has(id)),
+		];
+	}, [favoriteThemeIds]);
 
 	return (
 		<div className="relative">
@@ -60,7 +74,7 @@ const ThemePicker = ({ current, onChange }: ThemePickerProps) => {
 			{open && (
 				<div
 					ref={panelRef}
-					className="absolute right-0 top-full mt-2 w-[340px] bg-white rounded-xl shadow-xl border border-slate-200 p-3 z-100 animate-in fade-in slide-in-from-top-1"
+					className="absolute right-0 top-full mt-2 z-50 w-[340px] max-w-[calc(100vw-1.5rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-xl"
 					style={{
 						animation: "fadeSlideIn 0.15s ease-out",
 					}}
@@ -74,18 +88,14 @@ const ThemePicker = ({ current, onChange }: ThemePickerProps) => {
 					</div>
 
 					{/* 主题卡片列表 */}
-					<div className="space-y-1.5">
-						{themeIds.map((id) => {
+					<div className="max-h-[60vh] space-y-1.5 overflow-y-auto pr-1">
+						{orderedThemeIds.map((id) => {
 							const theme = themes[id];
 							const isActive = id === current;
+							const isFavorite = favoriteThemeIds.includes(id);
 							return (
-								<button
+								<div
 									key={id}
-									type="button"
-									onClick={() => {
-										onChange(id);
-										setOpen(false);
-									}}
 									className={`
 										w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150
 										${
@@ -95,42 +105,54 @@ const ThemePicker = ({ current, onChange }: ThemePickerProps) => {
 										}
 									`}
 								>
-									{/* 色块预览 */}
-									<div className="relative shrink-0 w-9 h-9 rounded-lg overflow-hidden shadow-sm border border-slate-200/60">
-										{/* 上半 - 主色 */}
-										<div
-											className="absolute inset-x-0 top-0 h-1/2"
-											style={{ backgroundColor: theme.previewColors[0] }}
-										/>
-										{/* 下半 - 浅色 */}
-										<div
-											className="absolute inset-x-0 bottom-0 h-1/2"
-											style={{ backgroundColor: theme.previewColors[1] }}
-										/>
-										{/* 选中勾 */}
-										{isActive && (
-											<div className="absolute inset-0 flex items-center justify-center bg-black/20">
-												<Check size={14} className="text-white drop-shadow" />
-											</div>
-										)}
-									</div>
-
-									{/* 文字 */}
-									<div className="flex-1 min-w-0">
-										<div className="flex items-center gap-2">
-											<span
-												className={`text-sm font-semibold ${isActive ? "text-slate-900" : "text-slate-700"}`}
-											>
-												{theme.name}
-											</span>
-											<span className="text-[10px] text-slate-400 font-medium">
-												{theme.nameEn}
-											</span>
+									<button
+										type="button"
+										onClick={() => {
+											onChange(id);
+											setOpen(false);
+										}}
+										className="flex min-w-0 flex-1 items-center gap-3 text-left"
+									>
+										{/* 色块预览 */}
+										<div className="relative shrink-0 w-9 h-9 rounded-lg overflow-hidden shadow-sm border border-slate-200/60">
+											{/* 上半 - 主色 */}
+											<div
+												className="absolute inset-x-0 top-0 h-1/2"
+												style={{ backgroundColor: theme.previewColors[0] }}
+											/>
+											{/* 下半 - 浅色 */}
+											<div
+												className="absolute inset-x-0 bottom-0 h-1/2"
+												style={{ backgroundColor: theme.previewColors[1] }}
+											/>
+											{/* 选中勾 */}
+											{isActive && (
+												<div className="absolute inset-0 flex items-center justify-center bg-black/20">
+													<Check
+														size={14}
+														className="text-white drop-shadow"
+													/>
+												</div>
+											)}
 										</div>
-										<p className="text-[11px] text-slate-400 leading-snug mt-0.5 truncate">
-											{theme.description}
-										</p>
-									</div>
+
+										{/* 文字 */}
+										<div className="min-w-0 flex-1">
+											<div className="flex items-center gap-2">
+												<span
+													className={`text-sm font-semibold ${isActive ? "text-slate-900" : "text-slate-700"}`}
+												>
+													{theme.name}
+												</span>
+												<span className="text-[10px] text-slate-400 font-medium">
+													{theme.nameEn}
+												</span>
+											</div>
+											<p className="text-[11px] text-slate-400 leading-snug mt-0.5 truncate">
+												{theme.description}
+											</p>
+										</div>
+									</button>
 
 									{/* 当前指示器 */}
 									{isActive && (
@@ -138,7 +160,24 @@ const ThemePicker = ({ current, onChange }: ThemePickerProps) => {
 											当前
 										</span>
 									)}
-								</button>
+
+									<button
+										type="button"
+										onClick={() => onToggleFavorite(id)}
+										className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${
+											isFavorite
+												? "text-amber-500 hover:bg-amber-50"
+												: "text-slate-300 hover:bg-slate-100 hover:text-slate-500"
+										}`}
+										title={isFavorite ? "取消收藏主题" : "收藏主题"}
+										aria-label={isFavorite ? "取消收藏主题" : "收藏主题"}
+									>
+										<Star
+											size={15}
+											fill={isFavorite ? "currentColor" : "none"}
+										/>
+									</button>
+								</div>
 							);
 						})}
 					</div>

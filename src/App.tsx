@@ -1,216 +1,503 @@
 import {
 	Download,
-	FileText,
-	Monitor,
+	Github,
+	ImageDown,
 	Printer,
 	RotateCcw,
+	Tags,
+	TrendingUp,
 	Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import FontSizeControl from "./components/FontSizeControl";
+import PageMarginControl from "./components/PageMarginControl";
 import ResumeEditor from "./components/ResumeEditor";
+import ResumeManager from "./components/ResumeManager";
 import ResumePreview from "./components/ResumePreview";
 import ThemePicker from "./components/ThemePicker";
-import { initialResumeState } from "./data/initialData";
-import { DEFAULT_THEME_ID } from "./data/themes";
-import type {
-	Education,
-	ResumeData,
-	SectionKey,
-	SkillItem,
-} from "./types/resume";
+import {
+	createResumeBackup,
+	normalizeResumeBackup,
+} from "./data/resumeBackup";
+import {
+	normalizeResumeData,
+	normalizeSectionIconVisibility,
+} from "./data/resumeData";
+import {
+	createResumeDocument,
+	createResumeLibrary,
+	incrementResumePatchVersion,
+	normalizeResumeAppearance,
+	normalizeResumeLibrary,
+	normalizeResumeTags,
+	normalizeResumeVersion,
+	type ResumeDocument,
+	type ResumeLibrary,
+} from "./data/resumeLibrary";
+import {
+	DEFAULT_RESUME_FONT_SIZE_PT,
+	DEFAULT_RESUME_PAGE_MARGIN_MM,
+	normalizeResumeFontSize,
+	normalizeResumePageMargin,
+	type ResumeFontSizePt,
+	type ResumePageMarginMm,
+} from "./data/resumeStyle";
+import {
+	DEFAULT_THEME_ID,
+	getDefaultSectionIconVisibility,
+	isThemeId,
+	normalizeThemeIdList,
+} from "./data/themes";
+import type { ResumeData, SectionIconVisibility } from "./types/resume";
 import type { ThemeId } from "./types/theme";
 
 const STORAGE_KEY = "resume-data";
 const THEME_STORAGE_KEY = "resume-theme";
+const FONT_SIZE_STORAGE_KEY = "resume-font-size";
+const PAGE_MARGIN_STORAGE_KEY = "resume-page-margin";
+const SECTION_ICONS_STORAGE_KEY = "resume-section-icons";
+const FAVORITE_THEMES_STORAGE_KEY = "resume-favorite-themes";
+const LIBRARY_STORAGE_KEY = "resume-library";
+const A4_HEIGHT_MM = 297;
+const A4_WIDTH_MM = 210;
 
-const ALL_SECTION_KEYS: SectionKey[] = [
-	"skills",
-	"experience",
-	"projects",
-	"education",
-	"other",
-];
+const getPrintablePageHeightMm = (pageMarginMm: ResumePageMarginMm) =>
+	A4_HEIGHT_MM - pageMarginMm * 2;
 
-/**
- * 将旧格式的 localStorage 数据迁移为新格式
- * 旧格式：skills 是对象 { core, react, engineering, style }
- * 新格式：skills 是数组 SkillItem[]
- * 旧格式：education 是单个对象 { school, degree, date }
- * 新格式：education 是数组 Education[]
- * 新增：sectionTitles、sectionOrder
- */
-function migrateData(raw: Record<string, unknown>): ResumeData {
-	const data = raw as Record<string, unknown>;
+type AppView = "manager" | "editor";
 
-	// --- 迁移 skills ---
-	let skills: SkillItem[];
-	if (Array.isArray(data.skills)) {
-		skills = data.skills as SkillItem[];
-	} else if (data.skills && typeof data.skills === "object") {
-		const oldSkills = data.skills as Record<string, string>;
-		const labelMap: Record<string, string> = {
-			core: "核心能力",
-			react: "React 生态",
-			engineering: "工程化",
-			style: "样式 & 性能",
-		};
-		skills = Object.entries(oldSkills).map(([key, value], index) => ({
-			id: index + 1,
-			label: labelMap[key] || key,
-			content: value || "",
-		}));
-	} else {
-		skills = initialResumeState.skills;
+interface ResumeMetaEditorProps {
+	document: ResumeDocument;
+	onUpdate: (
+		meta: Partial<Pick<ResumeDocument, "name" | "tags" | "version">>,
+	) => void;
+}
+
+const metaInputClass =
+	"w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500";
+
+const ResumeMetaEditor = ({ document, onUpdate }: ResumeMetaEditorProps) => (
+	<div className="border-b border-slate-200 bg-white p-4 sm:p-5 lg:p-6">
+		<div className="mb-3">
+			<h2 className="text-sm font-bold text-slate-800">简历信息</h2>
+			<p className="mt-1 text-xs text-slate-400">
+				管理名称、标签和版本号
+			</p>
+		</div>
+
+		<label className="mb-3 block">
+			<span className="mb-1 block text-xs font-medium text-slate-500">
+				简历名称
+			</span>
+			<input
+				value={document.name}
+				onChange={(event) => onUpdate({ name: event.target.value })}
+				className={metaInputClass}
+			/>
+		</label>
+
+		<div className="mb-3 grid grid-cols-[1fr_auto] gap-2">
+			<label className="block">
+				<span className="mb-1 block text-xs font-medium text-slate-500">
+					版本号
+				</span>
+				<input
+					value={document.version}
+					onChange={(event) => onUpdate({ version: event.target.value })}
+					className={`${metaInputClass} font-mono tabular-nums`}
+				/>
+			</label>
+			<button
+				type="button"
+				onClick={() =>
+					onUpdate({ version: incrementResumePatchVersion(document.version) })
+				}
+				className="mt-5 flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-400 transition hover:bg-slate-50 hover:text-blue-600"
+				title="版本 +0.0.1"
+				aria-label="版本 +0.0.1"
+			>
+				<TrendingUp size={15} />
+			</button>
+		</div>
+
+		<label className="block">
+			<span className="mb-1 block text-xs font-medium text-slate-500">
+				标签
+			</span>
+			<div className="relative">
+				<Tags
+					size={14}
+					className="pointer-events-none absolute left-2.5 top-2.5 text-slate-300"
+				/>
+				<input
+					key={document.id}
+					defaultValue={document.tags.join(", ")}
+					onBlur={(event) =>
+						onUpdate({ tags: normalizeResumeTags(event.target.value) })
+					}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") event.currentTarget.blur();
+					}}
+					className={`${metaInputClass} pl-8`}
+					placeholder="前端, 社招, 北京"
+				/>
+			</div>
+		</label>
+	</div>
+);
+
+function readLegacyResumeDocument(): ResumeDocument {
+	const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+	const themeId = isThemeId(savedTheme) ? savedTheme : DEFAULT_THEME_ID;
+	const fallbackIcons = getDefaultSectionIconVisibility(themeId);
+	const savedSectionIcons = localStorage.getItem(SECTION_ICONS_STORAGE_KEY);
+	let sectionIcons = fallbackIcons;
+
+	if (savedSectionIcons) {
+		try {
+			sectionIcons = normalizeSectionIconVisibility(
+				JSON.parse(savedSectionIcons),
+				fallbackIcons,
+			);
+		} catch {
+			sectionIcons = fallbackIcons;
+		}
 	}
 
-	// --- 迁移 education ---
-	let education: Education[];
-	if (Array.isArray(data.education)) {
-		education = data.education as Education[];
-	} else if (data.education && typeof data.education === "object") {
-		const oldEdu = data.education as {
-			school?: string;
-			degree?: string;
-			date?: string;
-		};
-		education = [
-			{
-				id: 1,
-				school: oldEdu.school || "",
-				degree: oldEdu.degree || "",
-				date: oldEdu.date || "",
-			},
-		];
-	} else {
-		education = initialResumeState.education;
+	let data: ResumeData | undefined;
+	const savedData = localStorage.getItem(STORAGE_KEY);
+	if (savedData) {
+		try {
+			data = normalizeResumeData(JSON.parse(savedData));
+		} catch (error) {
+			console.error("Failed to parse resume data", error);
+		}
 	}
 
-	// --- 迁移 sectionTitles ---
-	const defaultTitles = initialResumeState.sectionTitles;
-	let sectionTitles = defaultTitles;
-	if (data.sectionTitles && typeof data.sectionTitles === "object") {
-		const rawTitles = data.sectionTitles as Record<string, string>;
-		sectionTitles = {
-			skills: rawTitles.skills || defaultTitles.skills,
-			experience: rawTitles.experience || defaultTitles.experience,
-			projects: rawTitles.projects || defaultTitles.projects,
-			education: rawTitles.education || defaultTitles.education,
-			other: rawTitles.other || defaultTitles.other,
-		};
+	return createResumeDocument({
+		name: data?.personal.name.trim() || "默认简历",
+		data,
+		appearance: {
+			themeId,
+			fontSizePt: normalizeResumeFontSize(
+				localStorage.getItem(FONT_SIZE_STORAGE_KEY) ??
+					DEFAULT_RESUME_FONT_SIZE_PT,
+			),
+			pageMarginMm: normalizeResumePageMargin(
+				localStorage.getItem(PAGE_MARGIN_STORAGE_KEY) ??
+					DEFAULT_RESUME_PAGE_MARGIN_MM,
+			),
+			sectionIcons,
+		},
+	});
+}
+
+function readInitialLibrary(): ResumeLibrary {
+	const legacyDocument = readLegacyResumeDocument();
+	const savedLibrary = localStorage.getItem(LIBRARY_STORAGE_KEY);
+	if (savedLibrary) {
+		try {
+			return normalizeResumeLibrary(JSON.parse(savedLibrary), legacyDocument);
+		} catch {
+			return createResumeLibrary([legacyDocument], legacyDocument.id);
+		}
 	}
 
-	// --- personal: 确保所有字段存在 ---
-	const defaultPersonal = initialResumeState.personal;
-	const rawPersonal = (data.personal || {}) as Record<string, string>;
-	const personal = {
-		name: rawPersonal.name ?? defaultPersonal.name,
-		title: rawPersonal.title ?? defaultPersonal.title,
-		phone: rawPersonal.phone ?? defaultPersonal.phone,
-		email: rawPersonal.email ?? defaultPersonal.email,
-		location: rawPersonal.location ?? defaultPersonal.location,
-		availability: rawPersonal.availability ?? defaultPersonal.availability,
-		github: rawPersonal.github ?? defaultPersonal.github,
-		website: rawPersonal.website ?? defaultPersonal.website,
-	};
-
-	// --- experience & projects ---
-	const experience = Array.isArray(data.experience)
-		? (data.experience as ResumeData["experience"])
-		: initialResumeState.experience;
-
-	const projects = Array.isArray(data.projects)
-		? (data.projects as ResumeData["projects"])
-		: initialResumeState.projects;
-
-	// --- other ---
-	const other =
-		typeof data.other === "string" ? data.other : initialResumeState.other;
-
-	// --- sectionOrder: 验证并补全缺失的 key ---
-	let sectionOrder: SectionKey[];
-	if (Array.isArray(data.sectionOrder)) {
-		const valid = (data.sectionOrder as unknown[]).filter(
-			(k): k is SectionKey => ALL_SECTION_KEYS.includes(k as SectionKey),
-		);
-		const missing = ALL_SECTION_KEYS.filter((k) => !valid.includes(k));
-		sectionOrder = [...valid, ...missing];
-	} else {
-		sectionOrder = initialResumeState.sectionOrder;
-	}
-
-	return {
-		personal,
-		sectionTitles,
-		sectionOrder,
-		skills,
-		experience,
-		projects,
-		education,
-		other,
-	};
+	return createResumeLibrary([legacyDocument], legacyDocument.id);
 }
 
 function App() {
 	const importInputRef = useRef<HTMLInputElement>(null);
+	const resumePreviewRef = useRef<HTMLDivElement>(null);
+	const resumePreviewInnerRef = useRef<HTMLDivElement>(null);
+	const [view, setView] = useState<AppView>("manager");
+	const [library, setLibrary] = useState<ResumeLibrary>(readInitialLibrary);
 	const [importError, setImportError] = useState<string | null>(null);
+	const [imageExportStatus, setImageExportStatus] = useState<
+		"idle" | "exporting" | "error"
+	>("idle");
+	const [previewPageCount, setPreviewPageCount] = useState(1);
 
-	// ─── 主题状态 ─────────────────────────────────────
-	const [themeId, setThemeId] = useState<ThemeId>(() => {
-		const saved = localStorage.getItem(THEME_STORAGE_KEY);
-		if (
-			saved &&
-			[
-				"classic",
-				"minimal",
-				"executive",
-				"fresh",
-				"elegant",
-				"rose",
-				"aurora",
-			].includes(saved)
-		) {
-			return saved as ThemeId;
-		}
-		return DEFAULT_THEME_ID;
-	});
+	const activeDocument =
+		library.documents.find((document) => document.id === library.activeId) ??
+		library.documents[0];
+	const resumeData = activeDocument.data;
+	const {
+		themeId,
+		fontSizePt,
+		pageMarginMm,
+		sectionIcons,
+	} = activeDocument.appearance;
 
 	useEffect(() => {
-		localStorage.setItem(THEME_STORAGE_KEY, themeId);
-	}, [themeId]);
+		localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(library));
+	}, [library]);
 
-	const [resumeData, setResumeData] = useState<ResumeData>(() => {
-		const saved = localStorage.getItem(STORAGE_KEY);
-		if (saved) {
-			try {
-				const parsed = JSON.parse(saved);
-				return migrateData(parsed);
-			} catch (e) {
-				console.error("Failed to parse resume data", e);
-			}
-		}
-		return initialResumeState;
-	});
-
-	// 自动保存：数据变化时写入 localStorage
 	useEffect(() => {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(resumeData));
-	}, [resumeData]);
+		localStorage.setItem(THEME_STORAGE_KEY, themeId);
+		localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSizePt));
+		localStorage.setItem(PAGE_MARGIN_STORAGE_KEY, String(pageMarginMm));
+		localStorage.setItem(SECTION_ICONS_STORAGE_KEY, JSON.stringify(sectionIcons));
+	}, [fontSizePt, pageMarginMm, resumeData, sectionIcons, themeId]);
 
-	// 清除导入错误提示
+	const [favoriteThemeIds, setFavoriteThemeIds] = useState<ThemeId[]>(() => {
+		const saved = localStorage.getItem(FAVORITE_THEMES_STORAGE_KEY);
+		if (!saved) return [];
+
+		try {
+			return normalizeThemeIdList(JSON.parse(saved));
+		} catch {
+			return [];
+		}
+	});
+
+	useEffect(() => {
+		localStorage.setItem(
+			FAVORITE_THEMES_STORAGE_KEY,
+			JSON.stringify(favoriteThemeIds),
+		);
+	}, [favoriteThemeIds]);
+
+	const handleToggleFavoriteTheme = (id: ThemeId) => {
+		setFavoriteThemeIds((current) =>
+			current.includes(id)
+				? current.filter((item) => item !== id)
+				: [id, ...current],
+		);
+	};
+
+	useEffect(() => {
+		const styleId = "resume-print-page-margin";
+		let style = document.getElementById(styleId) as HTMLStyleElement | null;
+		if (!style) {
+			style = document.createElement("style");
+			style.id = styleId;
+			document.head.appendChild(style);
+		}
+
+		style.textContent = `@media print { @page { size: A4; margin: ${pageMarginMm}mm ${pageMarginMm}mm; } }`;
+	}, [pageMarginMm]);
+
 	useEffect(() => {
 		if (!importError) return;
 		const timer = setTimeout(() => setImportError(null), 4000);
 		return () => clearTimeout(timer);
 	}, [importError]);
 
+	useEffect(() => {
+		if (imageExportStatus !== "error") return;
+		const timer = setTimeout(() => setImageExportStatus("idle"), 4000);
+		return () => clearTimeout(timer);
+	}, [imageExportStatus]);
+
+	const updateActiveDocument = useCallback(
+		(updater: (document: ResumeDocument) => ResumeDocument) => {
+			setLibrary((current) => ({
+				...current,
+				documents: current.documents.map((document) =>
+					document.id === current.activeId
+						? {
+								...updater(document),
+								updatedAt: new Date().toISOString(),
+							}
+						: document,
+				),
+			}));
+		},
+		[],
+	);
+
+	const handleResumeDataChange = (nextData: ResumeData) => {
+		updateActiveDocument((document) => ({ ...document, data: nextData }));
+	};
+
+	const handleThemeChange = (nextThemeId: ThemeId) => {
+		updateActiveDocument((document) => ({
+			...document,
+			appearance: {
+				...document.appearance,
+				themeId: nextThemeId,
+				sectionIcons: getDefaultSectionIconVisibility(nextThemeId),
+			},
+		}));
+	};
+
+	const handleFontSizeChange = (nextFontSize: ResumeFontSizePt) => {
+		updateActiveDocument((document) => ({
+			...document,
+			appearance: { ...document.appearance, fontSizePt: nextFontSize },
+		}));
+	};
+
+	const handlePageMarginChange = (nextPageMargin: ResumePageMarginMm) => {
+		updateActiveDocument((document) => ({
+			...document,
+			appearance: { ...document.appearance, pageMarginMm: nextPageMargin },
+		}));
+	};
+
+	const handleSectionIconsChange = (
+		nextSectionIcons: SectionIconVisibility,
+	) => {
+		updateActiveDocument((document) => ({
+			...document,
+			appearance: {
+				...document.appearance,
+				sectionIcons: nextSectionIcons,
+			},
+		}));
+	};
+
+	const handleCreateResume = (input: { name: string; tags: string[] }) => {
+		const nextDocument = createResumeDocument({
+			name: input.name,
+			tags: input.tags,
+			template: "blank",
+		});
+		setLibrary((current) => ({
+			...current,
+			activeId: nextDocument.id,
+			documents: [nextDocument, ...current.documents],
+		}));
+		setView("editor");
+	};
+
+	const handleOpenResume = (id: string) => {
+		setLibrary((current) => ({ ...current, activeId: id }));
+		setView("editor");
+	};
+
+	const handleDuplicateResume = (id: string) => {
+		setLibrary((current) => {
+			const source = current.documents.find((document) => document.id === id);
+			if (!source) return current;
+			const nextDocument = createResumeDocument({
+				name: `${source.name} 副本`,
+				tags: source.tags,
+				version: source.version,
+				data: source.data,
+				appearance: source.appearance,
+			});
+
+			return {
+				...current,
+				activeId: nextDocument.id,
+				documents: [nextDocument, ...current.documents],
+			};
+		});
+	};
+
+	const handleDeleteResume = (id: string) => {
+		if (library.documents.length <= 1) return;
+		if (!window.confirm("确定要删除这份简历吗？")) return;
+
+		setLibrary((current) => {
+			const documents = current.documents.filter((document) => document.id !== id);
+			if (documents.length === 0) return current;
+
+			return {
+				...current,
+				activeId:
+					current.activeId === id ? documents[0].id : current.activeId,
+				documents,
+			};
+		});
+	};
+
+	const handleUpdateResumeMeta = (
+		id: string,
+		meta: Partial<Pick<ResumeDocument, "name" | "tags" | "version">>,
+	) => {
+		setLibrary((current) => ({
+			...current,
+			documents: current.documents.map((document) =>
+				document.id === id
+					? {
+							...document,
+							name:
+								meta.name !== undefined
+									? meta.name.slice(0, 80)
+									: document.name,
+							tags:
+								meta.tags !== undefined
+									? normalizeResumeTags(meta.tags)
+									: document.tags,
+							version:
+								meta.version !== undefined
+									? normalizeResumeVersion(meta.version)
+									: document.version,
+							updatedAt: new Date().toISOString(),
+						}
+					: document,
+			),
+		}));
+	};
+
+	const measurePreviewPages = useCallback(() => {
+		const preview = resumePreviewRef.current;
+		const inner = resumePreviewInnerRef.current;
+		if (!preview || !inner) return;
+
+		const previewWidth = preview.getBoundingClientRect().width || preview.scrollWidth;
+		const pxPerMm = previewWidth / A4_WIDTH_MM;
+		const printablePageHeight = Math.max(
+			1,
+			getPrintablePageHeightMm(pageMarginMm) * pxPerMm,
+		);
+		const contentHeight = inner.getBoundingClientRect().height;
+		const nextPageCount = Math.max(
+			1,
+			Math.ceil(contentHeight / printablePageHeight - 0.01),
+		);
+
+		setPreviewPageCount((current) =>
+			current === nextPageCount ? current : nextPageCount,
+		);
+	}, [pageMarginMm]);
+
+	useEffect(() => {
+		const inner = resumePreviewInnerRef.current;
+		if (!inner || view !== "editor") return;
+
+		measurePreviewPages();
+		const observer = new ResizeObserver(measurePreviewPages);
+		observer.observe(inner);
+		window.addEventListener("resize", measurePreviewPages);
+		const frame = window.requestAnimationFrame(measurePreviewPages);
+
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", measurePreviewPages);
+			window.cancelAnimationFrame(frame);
+		};
+	}, [
+		measurePreviewPages,
+		resumeData,
+		themeId,
+		fontSizePt,
+		sectionIcons,
+		view,
+	]);
+
 	const handleReset = () => {
-		if (window.confirm("确定要重置所有数据到默认模版吗？")) {
-			setResumeData(initialResumeState);
+		if (window.confirm("确定要重置当前简历到默认模版吗？")) {
+			updateActiveDocument((document) => ({
+				...document,
+				data: normalizeResumeData(undefined),
+				appearance: {
+					themeId: DEFAULT_THEME_ID,
+					fontSizePt: DEFAULT_RESUME_FONT_SIZE_PT,
+					pageMarginMm: DEFAULT_RESUME_PAGE_MARGIN_MM,
+					sectionIcons: getDefaultSectionIconVisibility(DEFAULT_THEME_ID),
+				},
+			}));
 		}
 	};
 
 	const handlePrint = useCallback(() => {
-		const name = resumeData.personal.name.trim() || "简历";
+		const name =
+			resumeData.personal.name.trim() || activeDocument.name.trim() || "简历";
 		const originalTitle = document.title;
 		document.title = `${name} - iResume 简历`;
 
@@ -221,16 +508,21 @@ function App() {
 		window.addEventListener("afterprint", restore);
 
 		window.print();
-	}, [resumeData.personal.name]);
+	}, [activeDocument.name, resumeData.personal.name]);
 
-	// --- 导出 JSON ---
 	const handleExport = () => {
-		const json = JSON.stringify(resumeData, null, 2);
+		const backup = createResumeBackup(
+			resumeData,
+			themeId,
+			fontSizePt,
+			pageMarginMm,
+			sectionIcons,
+		);
+		const json = JSON.stringify(backup, null, 2);
 		const blob = new Blob([json], { type: "application/json" });
 		const url = URL.createObjectURL(blob);
-
-		// 用姓名 + 时间戳命名，方便管理多份简历
-		const name = resumeData.personal.name.trim() || "resume";
+		const name =
+			activeDocument.name.trim() || resumeData.personal.name.trim() || "resume";
 		const filename = `${name}_iResume.json`;
 
 		const a = document.createElement("a");
@@ -240,16 +532,58 @@ function App() {
 		URL.revokeObjectURL(url);
 	};
 
-	// --- 导入 JSON（点击隐藏 input）---
+	const handleExportImage = async () => {
+		const node = resumePreviewRef.current;
+		const inner = resumePreviewInnerRef.current;
+		if (!node || !inner) return;
+
+		setImageExportStatus("exporting");
+		try {
+			const { toPng } = await import("html-to-image");
+			const nodeRect = node.getBoundingClientRect();
+			const innerRect = inner.getBoundingClientRect();
+			const styles = window.getComputedStyle(node);
+			const paddingBottom = Number.parseFloat(styles.paddingBottom) || 0;
+			const exportHeight = Math.ceil(
+				innerRect.bottom - nodeRect.top + paddingBottom,
+			);
+			const exportWidth = Math.ceil(nodeRect.width);
+			const dataUrl = await toPng(node, {
+				backgroundColor: "#ffffff",
+				cacheBust: true,
+				height: exportHeight,
+				pixelRatio: 2,
+				width: exportWidth,
+				style: {
+					boxShadow: "none",
+					height: `${exportHeight}px`,
+					minHeight: "0",
+					overflow: "hidden",
+					width: `${exportWidth}px`,
+				},
+			});
+
+			const name =
+				activeDocument.name.trim() || resumeData.personal.name.trim() || "resume";
+			const a = document.createElement("a");
+			a.href = dataUrl;
+			a.download = `${name}_iResume.png`;
+			a.click();
+			setImageExportStatus("idle");
+		} catch (error) {
+			console.error("Failed to export resume image", error);
+			setImageExportStatus("error");
+		}
+	};
+
 	const handleImportClick = () => {
 		setImportError(null);
 		importInputRef.current?.click();
 	};
 
-	const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const file = e.target.files?.[0];
-		// 重置 input，保证同一文件可以再次选择
-		e.target.value = "";
+	const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+		const file = event.target.files?.[0];
+		event.target.value = "";
 		if (!file) return;
 
 		if (!file.name.endsWith(".json")) {
@@ -261,8 +595,23 @@ function App() {
 		reader.onload = (ev) => {
 			try {
 				const parsed = JSON.parse(ev.target?.result as string);
-				const migrated = migrateData(parsed);
-				setResumeData(migrated);
+				const imported = normalizeResumeBackup(parsed);
+				const importedThemeId = imported.themeId ?? themeId;
+				updateActiveDocument((document) => ({
+					...document,
+					data: imported.data,
+					appearance: normalizeResumeAppearance(
+						{
+							themeId: importedThemeId,
+							fontSizePt: imported.fontSizePt ?? fontSizePt,
+							pageMarginMm: imported.pageMarginMm ?? pageMarginMm,
+							sectionIcons:
+								imported.sectionIcons ??
+								getDefaultSectionIconVisibility(importedThemeId),
+						},
+						document.appearance,
+					),
+				}));
 			} catch {
 				setImportError("文件解析失败，请确认是有效的简历 JSON 文件");
 			}
@@ -270,183 +619,201 @@ function App() {
 		reader.readAsText(file);
 	};
 
+	const printablePageHeightMm = getPrintablePageHeightMm(pageMarginMm);
+
+	if (view === "manager") {
+		return (
+			<ResumeManager
+				documents={library.documents}
+				onCreate={handleCreateResume}
+				onOpen={handleOpenResume}
+				onDuplicate={handleDuplicateResume}
+				onDelete={handleDeleteResume}
+			/>
+		);
+	}
+
 	return (
 		<div className="min-h-screen bg-slate-100 print:bg-white font-sans text-slate-900">
-			{/* ===== 移动端引导页（md 以下显示，md 以上隐藏） ===== */}
-			<div className="md:hidden print:hidden flex flex-col items-center justify-center min-h-screen bg-white px-8 py-12 text-center">
-				{/* Logo */}
-				<div className="flex items-center gap-2 mb-8">
-					<span className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-2xl font-black tracking-tight leading-none">
-						i
-					</span>
-					<span className="text-2xl font-bold text-slate-900">Resume</span>
-				</div>
-
-				{/* 图标 */}
-				<div className="w-20 h-20 bg-blue-50 rounded-2xl flex items-center justify-center mb-6">
-					<Monitor size={40} className="text-blue-600" />
-				</div>
-
-				{/* 标题 & 说明 */}
-				<h1 className="text-xl font-bold text-slate-900 mb-2">
-					请在电脑端使用
-				</h1>
-				<p className="text-sm text-slate-500 leading-relaxed mb-8 max-w-xs">
-					iResume 是一款专业的 PDF
-					简历生成器，需要在桌面浏览器中使用以获得最佳体验。
-				</p>
-
-				{/* 功能亮点 */}
-				<div className="w-full max-w-xs space-y-2 mb-10 text-left">
-					{[
-						"实时预览 A4 简历版面",
-						"自由编辑区块内容与顺序",
-						"一键导出高质量 PDF",
-						"JSON 备份，数据不丢失",
-					].map((feat) => (
-						<div
-							key={feat}
-							className="flex items-center gap-2.5 text-sm text-slate-600"
-						>
-							<div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-							{feat}
-						</div>
-					))}
-				</div>
-
-				{/* 复制链接提示 */}
-				<div className="w-full max-w-xs bg-slate-50 border border-slate-200 rounded-xl p-4">
-					<div className="flex items-center gap-2 mb-2">
-						<FileText size={14} className="text-slate-400" />
-						<span className="text-xs font-medium text-slate-500">
-							在电脑浏览器中打开
+			<nav className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2.5 shadow-sm print:hidden sm:px-4 lg:px-6">
+				<div className="flex items-center gap-4">
+					<button
+						type="button"
+						onClick={() => setView("manager")}
+						className="flex items-center gap-2 rounded-md font-bold text-xl transition hover:opacity-75"
+						title="返回简历库"
+					>
+						<span className="inline-flex items-center justify-center bg-blue-600 text-white px-2 py-1 rounded text-sm font-black leading-none tracking-tight">
+							i
 						</span>
-					</div>
-					<p className="text-xs text-slate-400 break-all select-all font-mono">
-						{window.location.href}
-					</p>
+						<span className="leading-none">Resume</span>
+					</button>
+
+					<span className="hidden max-w-[240px] truncate text-xs font-medium text-slate-400 xl:block">
+						{activeDocument.name} · v{activeDocument.version}
+					</span>
+
+					<a
+						href="https://github.com/dogxii/iResume"
+						target="_blank"
+						rel="noreferrer"
+						aria-label="GitHub 仓库"
+						className="hidden lg:flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-700 transition-colors"
+					>
+						<Github size={18} />
+					</a>
 				</div>
-			</div>
 
-			{/* ===== 桌面端完整应用（md 以上显示） ===== */}
-			<div className="hidden md:block print:block">
-				{/* 顶部导航栏 - 打印时隐藏 */}
-				<nav className="sticky top-0 z-50 bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center line print:hidden shadow-sm">
-					<div className="flex items-center gap-4">
-						<div className="flex items-center gap-2 font-bold text-xl">
-							<span className="inline-flex items-center justify-center bg-blue-600 text-white px-2 py-1 rounded text-sm font-black leading-none tracking-tight">
-								i
+				<div className="flex flex-wrap items-center justify-end gap-2">
+					{importError && (
+						<span className="text-xs text-red-500 bg-red-50 border border-red-200 px-3 py-1.5 rounded-md">
+							{importError}
+						</span>
+					)}
+					{imageExportStatus === "error" && (
+						<span className="text-xs text-red-500 bg-red-50 border border-red-200 px-3 py-1.5 rounded-md">
+							图片导出失败
+						</span>
+					)}
+
+					<ThemePicker
+						current={themeId}
+						favoriteThemeIds={favoriteThemeIds}
+						onChange={handleThemeChange}
+						onToggleFavorite={handleToggleFavoriteTheme}
+					/>
+					<FontSizeControl
+						value={fontSizePt}
+						onChange={handleFontSizeChange}
+					/>
+					<PageMarginControl
+						value={pageMarginMm}
+						onChange={handlePageMarginChange}
+					/>
+
+					<div className="w-px h-5 bg-slate-200" />
+
+					<button
+						type="button"
+						onClick={handleReset}
+						className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+						title="重置为默认模版"
+					>
+						<RotateCcw size={16} />
+						<span className="hidden sm:inline">重置</span>
+					</button>
+
+					<div className="w-px h-5 bg-slate-200" />
+
+					<button
+						type="button"
+						onClick={handleImportClick}
+						className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+						title="从 JSON 文件导入简历数据"
+					>
+						<Upload size={16} />
+						<span className="hidden sm:inline">导入</span>
+					</button>
+
+					<button
+						type="button"
+						onClick={handleExport}
+						className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+						title="导出当前简历数据为 JSON 文件"
+					>
+						<Download size={16} />
+						<span className="hidden sm:inline">导出</span>
+					</button>
+
+					<button
+						type="button"
+						onClick={handleExportImage}
+						disabled={imageExportStatus === "exporting"}
+						className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors disabled:cursor-wait disabled:opacity-60 sm:px-4"
+						title="导出当前简历为 PNG 图片"
+					>
+						<ImageDown size={16} />
+						<span className="hidden sm:inline">
+							{imageExportStatus === "exporting" ? "导出中" : "图片"}
+						</span>
+					</button>
+
+					<div className="w-px h-5 bg-slate-200" />
+
+					<button
+						type="button"
+						onClick={handlePrint}
+						className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors sm:px-4"
+					>
+						<Printer size={16} />
+						<span>保存 PDF</span>
+					</button>
+				</div>
+			</nav>
+
+			<input
+				ref={importInputRef}
+				type="file"
+				accept=".json,application/json"
+				className="hidden print:hidden"
+				onChange={handleImportFile}
+			/>
+
+			<main className="mx-auto flex min-h-[calc(100vh-64px)] max-w-[1600px] flex-col print:block print:h-auto print:max-w-none lg:h-[calc(100vh-60px)] lg:flex-row">
+				<div className="w-full shrink-0 border-b border-slate-200 bg-white print:hidden lg:h-full lg:w-[420px] lg:overflow-y-auto lg:border-b-0 lg:border-r xl:w-[450px] custom-scrollbar">
+					<ResumeMetaEditor
+						key={activeDocument.id}
+						document={activeDocument}
+						onUpdate={(meta) =>
+							handleUpdateResumeMeta(activeDocument.id, meta)
+						}
+					/>
+					<ResumeEditor
+						data={resumeData}
+						sectionIcons={sectionIcons}
+						onChange={handleResumeDataChange}
+						onSectionIconsChange={handleSectionIconsChange}
+					/>
+				</div>
+
+				<div className="flex-1 overflow-auto bg-slate-100 p-3 print:block print:h-auto print:flex-none print:overflow-visible print:bg-transparent print:p-0 sm:p-5 lg:h-full lg:p-8">
+					<div className="mx-auto w-fit">
+						<div className="sticky top-2 z-20 mb-3 flex justify-end print:hidden">
+							<span className="rounded-full border border-slate-200/60 bg-white/70 px-3 py-1 text-xs font-medium text-slate-400 opacity-80 shadow-sm backdrop-blur-sm">
+								预计 {previewPageCount} 页
 							</span>
-							<span className="leading-none">Resume</span>
 						</div>
-
-						{/* biome-ignore lint/a11y/useAnchorContent: none*/}
-						<a
-							href="https://github.com/dogxii/iResume"
-							target="_blank"
-							rel="noreferrer"
-							aria-label="GitHub 仓库"
-							className="hidden lg:flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-700 transition-colors"
+						<div
+							className="relative w-[210mm] bg-white shadow-2xl print:w-full print:min-h-0 print:bg-white print:shadow-none"
+							style={{ minHeight: `${previewPageCount * A4_HEIGHT_MM}mm` }}
 						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="24"
-								height="24"
-								viewBox="0 0 24 24"
-								fill="currentColor"
-								aria-hidden="true"
-							>
-								<title>GitHub</title>
-								<path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-							</svg>
-						</a>
-					</div>
-
-					<div className="flex items-center gap-2">
-						{/* 导入错误提示 */}
-						{importError && (
-							<span className="text-xs text-red-500 bg-red-50 border border-red-200 px-3 py-1.5 rounded-md">
-								{importError}
-							</span>
-						)}
-
-						<ThemePicker current={themeId} onChange={setThemeId} />
-
-						{/* 分隔线 */}
-						<div className="w-px h-5 bg-slate-200" />
-
-						<button
-							type="button"
-							onClick={handleReset}
-							className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-							title="重置为默认模版"
-						>
-							<RotateCcw size={16} />
-							<span className="hidden sm:inline">重置</span>
-						</button>
-
-						{/* 分隔线 */}
-						<div className="w-px h-5 bg-slate-200" />
-
-						<button
-							type="button"
-							onClick={handleImportClick}
-							className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-							title="从 JSON 文件导入简历数据"
-						>
-							<Upload size={16} />
-							<span className="hidden sm:inline">导入</span>
-						</button>
-
-						<button
-							type="button"
-							onClick={handleExport}
-							className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-							title="导出当前简历数据为 JSON 文件"
-						>
-							<Download size={16} />
-							<span className="hidden sm:inline">导出</span>
-						</button>
-
-						{/* 分隔线 */}
-						<div className="w-px h-5 bg-slate-200" />
-
-						<button
-							type="button"
-							onClick={handlePrint}
-							className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors"
-						>
-							<Printer size={16} />
-							<span>保存 PDF</span>
-						</button>
-					</div>
-				</nav>
-
-				{/* 隐藏的文件选择 input */}
-				<input
-					ref={importInputRef}
-					type="file"
-					accept=".json,application/json"
-					className="hidden print:hidden"
-					onChange={handleImportFile}
-				/>
-
-				<main className="max-w-[1600px] mx-auto flex flex-col md:flex-row h-[calc(100vh-60px)] print:h-auto print:max-w-none print:block">
-					{/* 左侧：编辑器 (可滚动) - 打印时隐藏 */}
-					<div className="w-full md:w-[400px] lg:w-[450px] bg-white border-r border-slate-200 overflow-y-auto print:hidden h-full custom-scrollbar">
-						<ResumeEditor data={resumeData} onChange={setResumeData} />
-					</div>
-
-					{/* 右侧：预览区域 (灰色背景) */}
-					<div className="flex-1 bg-slate-100 overflow-y-auto p-8 flex justify-center print:p-0 print:bg-transparent print:overflow-visible print:h-auto print:flex-none print:block h-full">
-						{/* A4 纸张容器 */}
-						<div className="w-[210mm] min-h-[297mm] bg-white shadow-2xl print:shadow-none print:w-full print:min-h-0 print:bg-white">
-							<ResumePreview data={resumeData} themeId={themeId} />
+							<ResumePreview
+								ref={resumePreviewRef}
+								contentRef={resumePreviewInnerRef}
+								data={resumeData}
+								themeId={themeId}
+								fontSizePt={fontSizePt}
+								pageMarginMm={pageMarginMm}
+								sectionIcons={sectionIcons}
+								minPageCount={previewPageCount}
+							/>
+							{Array.from({ length: previewPageCount - 1 }, (_, index) => (
+								<div
+									key={index}
+									className="pointer-events-none absolute left-0 right-0 z-10 border-t border-dashed border-blue-300/35 print:hidden"
+									style={{
+										top: `${pageMarginMm + (index + 1) * printablePageHeightMm}mm`,
+									}}
+								>
+									<span className="absolute right-3 -top-3 rounded-full border border-blue-100/70 bg-white/70 px-2 py-0.5 text-[10px] font-medium text-blue-400/75 opacity-80 shadow-sm backdrop-blur-sm">
+										第 {index + 2} 页
+									</span>
+								</div>
+							))}
 						</div>
 					</div>
-				</main>
-			</div>
-			{/* end desktop wrapper */}
+				</div>
+			</main>
 		</div>
 	);
 }

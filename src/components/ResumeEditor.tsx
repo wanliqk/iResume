@@ -1,11 +1,13 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
-import { useId } from "react";
+import { ArrowDown, ArrowUp, ChevronDown, Plus, Trash2 } from "lucide-react";
+import { useId, useState, type ReactNode } from "react";
+import { createResumeItemId } from "../data/resumeData";
 import type {
 	Education,
 	Experience,
 	Project,
 	ResumeData,
 	SectionKey,
+	SectionIconVisibility,
 	SkillItem,
 } from "../types/resume";
 
@@ -36,7 +38,7 @@ const InputGroup = ({
 			{type === "textarea" ? (
 				<textarea
 					id={id}
-					className="w-full p-2 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+					className="w-full resize-y rounded-md border border-slate-200 bg-white p-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
 					rows={4}
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
@@ -46,7 +48,7 @@ const InputGroup = ({
 				<input
 					id={id}
 					type="text"
-					className="w-full p-2 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+					className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
 					placeholder={placeholder}
@@ -58,10 +60,106 @@ const InputGroup = ({
 
 interface ResumeEditorProps {
 	data: ResumeData;
+	sectionIcons: SectionIconVisibility;
 	onChange: (data: ResumeData) => void;
+	onSectionIconsChange: (sectionIcons: SectionIconVisibility) => void;
 }
 
-const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
+interface ItemActionsProps {
+	index: number;
+	total: number;
+	onMove: (direction: "up" | "down") => void;
+	onRemove: () => void;
+}
+
+const ItemActions = ({
+	index,
+	total,
+	onMove,
+	onRemove,
+}: ItemActionsProps) => (
+	<div className="absolute top-2 right-2 flex gap-0.5">
+		<button
+			type="button"
+			onClick={() => onMove("up")}
+			disabled={index === 0}
+			className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-30"
+			title="上移"
+		>
+			<ArrowUp size={14} />
+		</button>
+		<button
+			type="button"
+			onClick={() => onMove("down")}
+			disabled={index === total - 1}
+			className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-30"
+			title="下移"
+		>
+			<ArrowDown size={14} />
+		</button>
+		<button
+			type="button"
+			onClick={onRemove}
+			className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+			title="删除"
+		>
+			<Trash2 size={14} />
+		</button>
+	</div>
+);
+
+interface EditorSectionProps {
+	title: string;
+	description?: string;
+	action?: ReactNode;
+	children: ReactNode;
+}
+
+const EditorSection = ({
+	title,
+	description,
+	action,
+	children,
+}: EditorSectionProps) => {
+	const [open, setOpen] = useState(true);
+
+	return (
+		<section className="border-b border-slate-200 pb-5 last:border-b-0">
+			<div className="mb-3 flex items-start gap-2">
+				<button
+					type="button"
+					onClick={() => setOpen((value) => !value)}
+					className="flex min-w-0 flex-1 items-start gap-2 rounded-md text-left transition-colors hover:text-blue-600"
+					aria-expanded={open}
+				>
+					<ChevronDown
+						size={16}
+						className={`mt-0.5 shrink-0 text-slate-400 transition-transform ${
+							open ? "" : "-rotate-90"
+						}`}
+					/>
+					<span className="min-w-0">
+						<span className="block font-bold text-slate-800">{title}</span>
+						{description && (
+							<span className="mt-1 block text-xs leading-relaxed text-slate-400">
+								{description}
+							</span>
+						)}
+					</span>
+				</button>
+				{action}
+			</div>
+			{open && <div>{children}</div>}
+		</section>
+	);
+};
+
+const ResumeEditor = ({
+	data,
+	sectionIcons,
+	onChange,
+	onSectionIconsChange,
+}: ResumeEditorProps) => {
 	const updatePersonal = (key: keyof ResumeData["personal"], value: string) => {
 		onChange({ ...data, personal: { ...data.personal, [key]: value } });
 	};
@@ -74,6 +172,10 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 			...data,
 			sectionTitles: { ...data.sectionTitles, [key]: value },
 		});
+	};
+
+	const updateSectionIcon = (key: SectionKey, visible: boolean) => {
+		onSectionIconsChange({ ...sectionIcons, [key]: visible });
 	};
 
 	// --- Skills (dynamic array) ---
@@ -91,7 +193,7 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 			...data,
 			skills: [
 				...data.skills,
-				{ id: Date.now(), label: "新分类", content: "" },
+				{ id: createResumeItemId(), label: "新分类", content: "" },
 			],
 		});
 	};
@@ -115,7 +217,12 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 			...data,
 			education: [
 				...data.education,
-				{ id: Date.now(), school: "学校名称", degree: "学位", date: "时间" },
+				{
+					id: createResumeItemId(),
+					school: "学校名称",
+					degree: "学位",
+					date: "时间",
+				},
 			],
 		});
 	};
@@ -146,7 +253,7 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 	) => {
 		onChange({
 			...data,
-			[section]: [...data[section], { ...template, id: Date.now() }],
+			[section]: [...data[section], { ...template, id: createResumeItemId() }],
 		});
 	};
 
@@ -214,12 +321,9 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 	};
 
 	return (
-		<div className="p-6 space-y-8 pb-20">
+		<div className="space-y-5 p-4 pb-20 sm:p-5 lg:p-6">
 			{/* 个人信息 */}
-			<section>
-				<h3 className="font-bold text-slate-800 mb-4 border-b pb-2">
-					个人信息
-				</h3>
+			<EditorSection title="个人信息">
 				<div className="grid grid-cols-1 gap-2">
 					<InputGroup
 						label="姓名"
@@ -268,16 +372,13 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 						placeholder="例：your-portfolio.com"
 					/>
 				</div>
-			</section>
+			</EditorSection>
 
 			{/* 区块顺序 */}
-			<section>
-				<h3 className="font-bold text-slate-800 mb-4 border-b pb-2">
-					区块顺序
-				</h3>
-				<p className="text-xs text-slate-400 mb-3">
-					点击箭头调整各区块在简历中的上下顺序
-				</p>
+			<EditorSection
+				title="区块顺序"
+				description="点击箭头调整各区块在简历中的上下顺序"
+			>
 				<div className="space-y-1.5">
 					{data.sectionOrder.map((key, index) => (
 						<div
@@ -308,16 +409,13 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 						</div>
 					))}
 				</div>
-			</section>
+			</EditorSection>
 
 			{/* 区块标题自定义 */}
-			<section>
-				<h3 className="font-bold text-slate-800 mb-4 border-b pb-2">
-					区块标题
-				</h3>
-				<p className="text-xs text-slate-400 mb-3">
-					自定义各区块在简历中显示的标题
-				</p>
+			<EditorSection
+				title="区块标题"
+				description="自定义各区块标题，并控制是否显示线性小图标"
+			>
 				<div className="grid grid-cols-2 gap-2">
 					<InputGroup
 						label="技术栈标题"
@@ -345,23 +443,44 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 						onChange={(v) => updateSectionTitle("other", v)}
 					/>
 				</div>
-			</section>
+				<div className="mt-2 rounded border border-slate-200 bg-slate-50 px-3 py-2">
+					<p className="text-xs font-medium text-slate-500 mb-2">
+						区块标题图标
+					</p>
+					<div className="grid grid-cols-2 gap-2">
+						{data.sectionOrder.map((key) => (
+							<label
+								key={key}
+								className="flex items-center gap-2 text-xs text-slate-600"
+							>
+								<input
+									type="checkbox"
+									checked={sectionIcons[key]}
+									onChange={(e) => updateSectionIcon(key, e.target.checked)}
+									className="h-3.5 w-3.5 accent-blue-600"
+								/>
+								<span>{data.sectionTitles[key] || sectionFallbackNames[key]}</span>
+							</label>
+						))}
+					</div>
+				</div>
+			</EditorSection>
 
 			{/* 技术栈 (动态) */}
-			<section>
-				<div className="flex justify-between items-center mb-4 border-b pb-2">
-					<h3 className="font-bold text-slate-800">
-						{data.sectionTitles.skills || "技术栈"}
-					</h3>
+			<EditorSection
+				title={data.sectionTitles.skills || "技术栈"}
+				description="支持粗体和链接语法，内容会实时反映到预览"
+				action={
 					<button
 						type="button"
 						onClick={addSkill}
-						className="text-blue-600 hover:bg-blue-50 p-1 rounded"
+						className="flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors hover:bg-blue-50"
 						title="添加技能分类"
 					>
 						<Plus size={16} />
 					</button>
-				</div>
+				}
+			>
 				<p className="text-xs text-slate-400 mb-3 leading-relaxed">
 					内容支持行内语法：
 					<code className="bg-slate-100 px-1 rounded text-slate-600">
@@ -375,36 +494,14 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 				{data.skills.map((skill, index) => (
 					<div
 						key={skill.id}
-						className="bg-slate-50 p-4 rounded mb-3 relative group"
+						className="relative mb-3 rounded-md border border-slate-200 bg-slate-50 p-4"
 					>
-						<div className="absolute top-2 right-2 flex gap-1">
-							<button
-								type="button"
-								onClick={() => moveSkillItem(index, "up")}
-								disabled={index === 0}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
-								title="上移"
-							>
-								<ArrowUp size={14} />
-							</button>
-							<button
-								type="button"
-								onClick={() => moveSkillItem(index, "down")}
-								disabled={index === data.skills.length - 1}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
-								title="下移"
-							>
-								<ArrowDown size={14} />
-							</button>
-							<button
-								type="button"
-								onClick={() => removeSkill(skill.id)}
-								className="text-slate-400 hover:text-red-500"
-								title="删除"
-							>
-								<Trash2 size={14} />
-							</button>
-						</div>
+						<ItemActions
+							index={index}
+							total={data.skills.length}
+							onMove={(direction) => moveSkillItem(index, direction)}
+							onRemove={() => removeSkill(skill.id)}
+						/>
 						<InputGroup
 							label="分类名称"
 							value={skill.label}
@@ -424,14 +521,12 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 						暂无技能分类，点击 + 添加
 					</p>
 				)}
-			</section>
+			</EditorSection>
 
 			{/* 工作经历 */}
-			<section>
-				<div className="flex justify-between items-center mb-4 border-b pb-2">
-					<h3 className="font-bold text-slate-800">
-						{data.sectionTitles.experience || "工作经历"}
-					</h3>
+			<EditorSection
+				title={data.sectionTitles.experience || "工作经历"}
+				action={
 					<button
 						type="button"
 						onClick={() =>
@@ -442,45 +537,24 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 								details: "",
 							})
 						}
-						className="text-blue-600 hover:bg-blue-50 p-1 rounded"
+						className="flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors hover:bg-blue-50"
 						title="添加工作经历"
 					>
 						<Plus size={16} />
 					</button>
-				</div>
+				}
+			>
 				{data.experience.map((exp, index) => (
 					<div
 						key={exp.id}
-						className="bg-slate-50 p-4 rounded mb-4 relative group"
+						className="relative mb-4 rounded-md border border-slate-200 bg-slate-50 p-4"
 					>
-						<div className="absolute top-2 right-2 flex gap-1">
-							<button
-								type="button"
-								onClick={() => moveExperienceItem(index, "up")}
-								disabled={index === 0}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
-								title="上移"
-							>
-								<ArrowUp size={14} />
-							</button>
-							<button
-								type="button"
-								onClick={() => moveExperienceItem(index, "down")}
-								disabled={index === data.experience.length - 1}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
-								title="下移"
-							>
-								<ArrowDown size={14} />
-							</button>
-							<button
-								type="button"
-								onClick={() => removeItem("experience", exp.id)}
-								className="text-slate-400 hover:text-red-500"
-								title="删除"
-							>
-								<Trash2 size={14} />
-							</button>
-						</div>
+						<ItemActions
+							index={index}
+							total={data.experience.length}
+							onMove={(direction) => moveExperienceItem(index, direction)}
+							onRemove={() => removeItem("experience", exp.id)}
+						/>
 						<InputGroup
 							label="公司"
 							value={exp.company}
@@ -520,14 +594,12 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 						暂无工作经历，点击 + 添加
 					</p>
 				)}
-			</section>
+			</EditorSection>
 
 			{/* 项目 */}
-			<section>
-				<div className="flex justify-between items-center mb-4 border-b pb-2">
-					<h3 className="font-bold text-slate-800">
-						{data.sectionTitles.projects || "项目经历"}
-					</h3>
+			<EditorSection
+				title={data.sectionTitles.projects || "项目经历"}
+				action={
 					<button
 						type="button"
 						onClick={() =>
@@ -539,42 +611,24 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 								description: "",
 							})
 						}
-						className="text-blue-600 hover:bg-blue-50 p-1 rounded"
+						className="flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors hover:bg-blue-50"
 						title="添加项目"
 					>
 						<Plus size={16} />
 					</button>
-				</div>
+				}
+			>
 				{data.projects.map((proj, index) => (
-					<div key={proj.id} className="bg-slate-50 p-4 rounded mb-4 relative">
-						<div className="absolute top-2 right-2 flex gap-1">
-							<button
-								type="button"
-								onClick={() => moveProjectItem(index, "up")}
-								disabled={index === 0}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
-								title="上移"
-							>
-								<ArrowUp size={14} />
-							</button>
-							<button
-								type="button"
-								onClick={() => moveProjectItem(index, "down")}
-								disabled={index === data.projects.length - 1}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
-								title="下移"
-							>
-								<ArrowDown size={14} />
-							</button>
-							<button
-								type="button"
-								onClick={() => removeItem("projects", proj.id)}
-								className="text-slate-400 hover:text-red-500"
-								title="删除"
-							>
-								<Trash2 size={14} />
-							</button>
-						</div>
+					<div
+						key={proj.id}
+						className="relative mb-4 rounded-md border border-slate-200 bg-slate-50 p-4"
+					>
+						<ItemActions
+							index={index}
+							total={data.projects.length}
+							onMove={(direction) => moveProjectItem(index, direction)}
+							onRemove={() => removeItem("projects", proj.id)}
+						/>
 						<InputGroup
 							label="项目名"
 							value={proj.name}
@@ -622,56 +676,33 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 						暂无项目经历，点击 + 添加
 					</p>
 				)}
-			</section>
+			</EditorSection>
 
 			{/* 教育 */}
-			<section>
-				<div className="flex justify-between items-center mb-4 border-b pb-2">
-					<h3 className="font-bold text-slate-800">
-						{data.sectionTitles.education || "教育背景"}
-					</h3>
+			<EditorSection
+				title={data.sectionTitles.education || "教育背景"}
+				action={
 					<button
 						type="button"
 						onClick={addEducation}
-						className="text-blue-600 hover:bg-blue-50 p-1 rounded"
+						className="flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors hover:bg-blue-50"
 						title="添加教育经历"
 					>
 						<Plus size={16} />
 					</button>
-				</div>
+				}
+			>
 				{data.education.map((edu, index) => (
 					<div
 						key={edu.id}
-						className="bg-slate-50 p-4 rounded mb-4 relative group"
+						className="relative mb-4 rounded-md border border-slate-200 bg-slate-50 p-4"
 					>
-						<div className="absolute top-2 right-2 flex gap-1">
-							<button
-								type="button"
-								onClick={() => moveEducationItem(index, "up")}
-								disabled={index === 0}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
-								title="上移"
-							>
-								<ArrowUp size={14} />
-							</button>
-							<button
-								type="button"
-								onClick={() => moveEducationItem(index, "down")}
-								disabled={index === data.education.length - 1}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
-								title="下移"
-							>
-								<ArrowDown size={14} />
-							</button>
-							<button
-								type="button"
-								onClick={() => removeEducation(edu.id)}
-								className="text-slate-400 hover:text-red-500"
-								title="删除"
-							>
-								<Trash2 size={14} />
-							</button>
-						</div>
+						<ItemActions
+							index={index}
+							total={data.education.length}
+							onMove={(direction) => moveEducationItem(index, direction)}
+							onRemove={() => removeEducation(edu.id)}
+						/>
 						<InputGroup
 							label="学校"
 							value={edu.school}
@@ -694,13 +725,10 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 						暂无教育经历，点击 + 添加
 					</p>
 				)}
-			</section>
+			</EditorSection>
 
 			{/* 其他 */}
-			<section>
-				<h3 className="font-bold text-slate-800 mb-4 border-b pb-2">
-					{data.sectionTitles.other || "其他"}
-				</h3>
+			<EditorSection title={data.sectionTitles.other || "其他"}>
 				<p className="text-xs text-slate-400 mb-2 leading-relaxed">
 					每行一条，支持行内语法：
 					<br />
@@ -717,7 +745,7 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 					可选（写不写都会显示为列表）
 				</p>
 				<textarea
-					className="w-full p-2 border border-slate-200 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none font-mono"
+					className="w-full resize-y rounded-md border border-slate-200 bg-white p-2 font-mono text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
 					rows={6}
 					value={data.other}
 					onChange={(e) => onChange({ ...data, other: e.target.value })}
@@ -730,7 +758,7 @@ const ResumeEditor = ({ data, onChange }: ResumeEditorProps) => {
 						清空内容后「其他」区块将不在简历中显示
 					</p>
 				)}
-			</section>
+			</EditorSection>
 		</div>
 	);
 };

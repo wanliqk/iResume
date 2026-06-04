@@ -1,0 +1,229 @@
+import { initialResumeState } from "./initialData";
+import {
+	createBlankResumeData,
+	createSectionIconVisibility,
+	isRecord,
+	normalizeResumeData,
+	normalizeSectionIconVisibility,
+} from "./resumeData";
+import {
+	DEFAULT_RESUME_FONT_SIZE_PT,
+	DEFAULT_RESUME_PAGE_MARGIN_MM,
+	normalizeResumeFontSize,
+	normalizeResumePageMargin,
+	type ResumeFontSizePt,
+	type ResumePageMarginMm,
+} from "./resumeStyle";
+import {
+	DEFAULT_THEME_ID,
+	getDefaultSectionIconVisibility,
+	isThemeId,
+} from "./themes";
+import type { ResumeData, SectionIconVisibility } from "../types/resume";
+import type { ThemeId } from "../types/theme";
+
+export interface ResumeAppearance {
+	themeId: ThemeId;
+	fontSizePt: ResumeFontSizePt;
+	pageMarginMm: ResumePageMarginMm;
+	sectionIcons: SectionIconVisibility;
+}
+
+export interface ResumeDocument {
+	id: string;
+	name: string;
+	tags: string[];
+	version: string;
+	createdAt: string;
+	updatedAt: string;
+	data: ResumeData;
+	appearance: ResumeAppearance;
+}
+
+export interface ResumeLibrary {
+	version: 1;
+	activeId: string;
+	documents: ResumeDocument[];
+}
+
+interface CreateResumeDocumentOptions {
+	name?: string;
+	tags?: string[];
+	version?: string;
+	data?: ResumeData;
+	appearance?: Partial<ResumeAppearance>;
+	now?: string;
+	template?: "sample" | "blank";
+}
+
+const DEFAULT_RESUME_VERSION = "1.0.0";
+
+const createResumeId = () =>
+	`resume-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const readString = (value: unknown, fallback = "") =>
+	typeof value === "string" ? value : fallback;
+
+const isValidDateString = (value: unknown): value is string =>
+	typeof value === "string" && Number.isFinite(new Date(value).getTime());
+
+export const normalizeResumeTags = (value: unknown): string[] => {
+	const values = Array.isArray(value)
+		? value
+		: typeof value === "string"
+			? value.split(/[,，]/)
+			: [];
+	const seen = new Set<string>();
+
+	return values
+		.map((item) => readString(item).trim())
+		.filter((item) => {
+			if (!item || seen.has(item)) return false;
+			seen.add(item);
+			return true;
+		})
+		.slice(0, 8);
+};
+
+export const normalizeResumeVersion = (value: unknown): string => {
+	const version = readString(value, DEFAULT_RESUME_VERSION).trim();
+	return version.length > 0 ? version.slice(0, 24) : DEFAULT_RESUME_VERSION;
+};
+
+export const incrementResumePatchVersion = (version: string): string => {
+	const parts = version.split(".").map((part) => Number(part));
+	if (
+		parts.length !== 3 ||
+		parts.some((part) => !Number.isInteger(part) || part < 0)
+	) {
+		return DEFAULT_RESUME_VERSION;
+	}
+
+	return `${parts[0]}.${parts[1]}.${parts[2] + 1}`;
+};
+
+export function normalizeResumeAppearance(
+	value: unknown,
+	fallback?: Partial<ResumeAppearance>,
+): ResumeAppearance {
+	const raw = isRecord(value) ? value : {};
+	const fallbackThemeId = fallback?.themeId ?? DEFAULT_THEME_ID;
+	const themeId =
+		typeof raw.themeId === "string" && isThemeId(raw.themeId)
+			? raw.themeId
+			: fallbackThemeId;
+	const fallbackIcons =
+		fallback?.sectionIcons ?? getDefaultSectionIconVisibility(themeId);
+
+	return {
+		themeId,
+		fontSizePt: normalizeResumeFontSize(
+			raw.fontSizePt ?? fallback?.fontSizePt ?? DEFAULT_RESUME_FONT_SIZE_PT,
+		),
+		pageMarginMm: normalizeResumePageMargin(
+			raw.pageMarginMm ??
+				fallback?.pageMarginMm ??
+				DEFAULT_RESUME_PAGE_MARGIN_MM,
+		),
+		sectionIcons: normalizeSectionIconVisibility(
+			raw.sectionIcons,
+			fallbackIcons,
+		),
+	};
+}
+
+export function createResumeDocument(
+	options: CreateResumeDocumentOptions = {},
+): ResumeDocument {
+	const now = options.now ?? new Date().toISOString();
+	const baseData =
+		options.data ??
+		(options.template === "blank" ? createBlankResumeData() : initialResumeState);
+	const data = normalizeResumeData(baseData);
+	const appearance = normalizeResumeAppearance(options.appearance, {
+		themeId: DEFAULT_THEME_ID,
+		fontSizePt: DEFAULT_RESUME_FONT_SIZE_PT,
+		pageMarginMm: DEFAULT_RESUME_PAGE_MARGIN_MM,
+		sectionIcons: createSectionIconVisibility(false),
+	});
+	const personalName = data.personal.name.trim();
+
+	return {
+		id: createResumeId(),
+		name: readString(options.name).trim() || personalName || "默认简历",
+		tags: normalizeResumeTags(options.tags),
+		version: normalizeResumeVersion(options.version),
+		createdAt: now,
+		updatedAt: now,
+		data,
+		appearance,
+	};
+}
+
+export function normalizeResumeDocument(
+	value: unknown,
+	index: number,
+): ResumeDocument {
+	if (!isRecord(value)) {
+		return createResumeDocument({ name: `简历 ${index + 1}` });
+	}
+
+	const now = new Date().toISOString();
+	const data = normalizeResumeData(value.data);
+	const personalName = data.personal.name.trim();
+
+	return {
+		id: readString(value.id).trim() || createResumeId(),
+		name:
+			readString(value.name).trim() ||
+			personalName ||
+			(index === 0 ? "默认简历" : `简历 ${index + 1}`),
+		tags: normalizeResumeTags(value.tags),
+		version: normalizeResumeVersion(value.version),
+		createdAt: isValidDateString(value.createdAt) ? value.createdAt : now,
+		updatedAt: isValidDateString(value.updatedAt) ? value.updatedAt : now,
+		data,
+		appearance: normalizeResumeAppearance(value.appearance),
+	};
+}
+
+export function createResumeLibrary(
+	documents: ResumeDocument[] = [createResumeDocument()],
+	activeId?: string,
+): ResumeLibrary {
+	const safeDocuments =
+		documents.length > 0 ? documents : [createResumeDocument()];
+	const firstDocument = safeDocuments[0];
+	const safeActiveId =
+		activeId && safeDocuments.some((document) => document.id === activeId)
+			? activeId
+			: firstDocument.id;
+
+	return {
+		version: 1,
+		activeId: safeActiveId,
+		documents: safeDocuments,
+	};
+}
+
+export function normalizeResumeLibrary(
+	value: unknown,
+	fallbackDocument?: ResumeDocument,
+): ResumeLibrary {
+	if (!isRecord(value) || !Array.isArray(value.documents)) {
+		return createResumeLibrary(
+			fallbackDocument ? [fallbackDocument] : [createResumeDocument()],
+			fallbackDocument?.id,
+		);
+	}
+
+	const seen = new Set<string>();
+	const documents = value.documents.map(normalizeResumeDocument).map((doc) => {
+		let id = doc.id;
+		while (seen.has(id)) id = createResumeId();
+		seen.add(id);
+		return { ...doc, id };
+	});
+
+	return createResumeLibrary(documents, readString(value.activeId));
+}
