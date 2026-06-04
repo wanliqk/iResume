@@ -9,6 +9,7 @@ import {
 	PanelRightOpen,
 	Printer,
 	RotateCcw,
+	SlidersHorizontal,
 	Tags,
 	TrendingUp,
 	Upload,
@@ -66,6 +67,7 @@ import {
 	getDefaultSectionIconVisibility,
 	isThemeId,
 	normalizeThemeIdList,
+	themes,
 } from "./data/themes";
 import type { ResumeData, SectionIconVisibility, SectionKey } from "./types/resume";
 import type { ThemeId } from "./types/theme";
@@ -314,8 +316,10 @@ function App() {
 	const [activeSection, setActiveSection] = useState<SectionKey>("skills");
 	const [isSpacePanning, setIsSpacePanning] = useState(false);
 	const [isPanning, setIsPanning] = useState(false);
+	const [canvasShortcutsActive, setCanvasShortcutsActive] = useState(false);
 	const [leftPanelOpen, setLeftPanelOpen] = useState(true);
 	const [rightPanelOpen, setRightPanelOpen] = useState(true);
+	const [appearancePanelOpen, setAppearancePanelOpen] = useState(false);
 	const [previewZoom, setPreviewZoom] = useState<PreviewZoom>(() =>
 		normalizePreviewZoom(
 			localStorage.getItem(PREVIEW_ZOOM_STORAGE_KEY) ?? DEFAULT_PREVIEW_ZOOM,
@@ -390,17 +394,57 @@ function App() {
 	}, [activeSection, resumeData.sectionOrder]);
 
 	useEffect(() => {
+		if (view !== "editor") {
+			setCanvasShortcutsActive(false);
+			setAppearancePanelOpen(false);
+		}
+	}, [view]);
+
+	useEffect(() => {
+		if (!appearancePanelOpen) return;
+
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setAppearancePanelOpen(false);
+		};
+
+		document.addEventListener("keydown", handleKeyDown);
+		return () => document.removeEventListener("keydown", handleKeyDown);
+	}, [appearancePanelOpen]);
+
+	useEffect(() => {
 		if (view !== "editor") return;
 
-		const isEditableTarget = (target: EventTarget | null) => {
+		const isInteractiveTarget = (target: EventTarget | null) => {
 			if (!(target instanceof HTMLElement)) return false;
-			const tagName = target.tagName.toLowerCase();
-			return (
-				target.isContentEditable ||
-				tagName === "input" ||
-				tagName === "textarea" ||
-				tagName === "select"
+			return Boolean(
+				target.closest(
+					'input, textarea, select, button, [role="button"], [contenteditable="true"]',
+				),
 			);
+		};
+
+		const isWorkbenchChromeTarget = (target: EventTarget | null) => {
+			return (
+				target instanceof HTMLElement &&
+				Boolean(target.closest('[data-workbench-chrome="true"]'))
+			);
+		};
+
+		const canUseCanvasShortcuts = (target: EventTarget | null) =>
+			canvasShortcutsActive &&
+			!isInteractiveTarget(target) &&
+			!isWorkbenchChromeTarget(target);
+
+		const canUseWheelZoom = (target: EventTarget | null) =>
+			canvasShortcutsActive && !isWorkbenchChromeTarget(target);
+
+		const blurCanvasShortcuts = (event: Event) => {
+			if (
+				isWorkbenchChromeTarget(event.target) ||
+				isInteractiveTarget(event.target)
+			) {
+				setCanvasShortcutsActive(false);
+			}
 		};
 
 		const isSpaceKey = (event: KeyboardEvent) =>
@@ -422,7 +466,7 @@ function App() {
 		};
 
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (isEditableTarget(event.target)) return;
+			if (!canUseCanvasShortcuts(event.target)) return;
 
 			if (isSpaceKey(event)) {
 				event.preventDefault();
@@ -455,6 +499,7 @@ function App() {
 
 		const handleKeyUp = (event: KeyboardEvent) => {
 			if (!isSpaceKey(event)) return;
+			if (!isSpacePanning && !isPanning) return;
 			event.preventDefault();
 			event.stopPropagation();
 			panStateRef.current = null;
@@ -465,6 +510,7 @@ function App() {
 
 		const handleWheel = (event: WheelEvent) => {
 			if (!(event.metaKey || event.ctrlKey) || event.deltaY === 0) return;
+			if (!canUseWheelZoom(event.target)) return;
 
 			event.preventDefault();
 			event.stopPropagation();
@@ -485,6 +531,8 @@ function App() {
 		document.addEventListener("keydown", handleKeyDown, true);
 		window.addEventListener("keyup", handleKeyUp, true);
 		document.addEventListener("keyup", handleKeyUp, true);
+		document.addEventListener("focusin", blurCanvasShortcuts, true);
+		document.addEventListener("pointerdown", blurCanvasShortcuts, true);
 		window.addEventListener("blur", releaseHand);
 		window.addEventListener("wheel", handleWheel, {
 			capture: true,
@@ -496,11 +544,13 @@ function App() {
 			document.removeEventListener("keydown", handleKeyDown, true);
 			window.removeEventListener("keyup", handleKeyUp, true);
 			document.removeEventListener("keyup", handleKeyUp, true);
+			document.removeEventListener("focusin", blurCanvasShortcuts, true);
+			document.removeEventListener("pointerdown", blurCanvasShortcuts, true);
 			window.removeEventListener("blur", releaseHand);
 			window.removeEventListener("wheel", handleWheel, true);
 			releaseHand();
 		};
-	}, [view]);
+	}, [canvasShortcutsActive, isPanning, isSpacePanning, view]);
 
 	const handleToggleFavoriteTheme = (id: ThemeId) => {
 		setFavoriteThemeIds((current) =>
@@ -595,6 +645,9 @@ function App() {
 	const handleCanvasPointerDown = (
 		event: ReactPointerEvent<HTMLDivElement>,
 	) => {
+		event.currentTarget.focus({ preventScroll: true });
+		setCanvasShortcutsActive(true);
+		setAppearancePanelOpen(false);
 		if (!isSpacePanning || event.button !== 0) return;
 		const node = canvasScrollRef.current;
 		if (!node) return;
@@ -966,6 +1019,7 @@ function App() {
 		leftPanelOpen ? "lg:left-[392px] xl:left-[416px]" : "lg:left-14",
 		rightPanelOpen ? "lg:right-[424px] xl:right-[448px]" : "lg:right-14",
 	].join(" ");
+	const currentThemeName = themes[themeId].name;
 
 	return (
 		<div className="relative min-h-screen bg-slate-100 font-sans text-slate-900 print:bg-white lg:h-screen lg:overflow-hidden">
@@ -977,19 +1031,51 @@ function App() {
 				onChange={handleImportFile}
 			/>
 
-			<div className={toolbarFrameClass}>
-				<div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/60 bg-white/80 px-1.5 py-1 shadow-md shadow-slate-900/5 backdrop-blur scrollbar-none">
-					<ThemePicker
-						current={themeId}
-						favoriteThemeIds={favoriteThemeIds}
-						onChange={handleThemeChange}
-						onToggleFavorite={handleToggleFavoriteTheme}
-					/>
-					<FontSizeControl value={fontSizePt} onChange={handleFontSizeChange} />
-					<PageMarginControl
-						value={pageMarginMm}
-						onChange={handlePageMarginChange}
-					/>
+			<div className={toolbarFrameClass} data-workbench-chrome="true">
+				<div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/55 bg-white/72 px-1.5 py-1 shadow-sm shadow-slate-900/5 backdrop-blur scrollbar-none">
+					<div className="relative">
+						<button
+							type="button"
+							onClick={() => setAppearancePanelOpen((open) => !open)}
+							className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100/80"
+							title="外观设置"
+							aria-expanded={appearancePanelOpen}
+						>
+							<SlidersHorizontal size={14} className="text-slate-400" />
+							<span>外观</span>
+							<span className="hidden max-w-20 truncate text-slate-400 sm:inline">
+								{currentThemeName}
+							</span>
+						</button>
+						{appearancePanelOpen && (
+							<div className="absolute left-0 top-10 z-20 w-[min(88vw,380px)] rounded-xl border border-slate-200/80 bg-white/95 p-2 shadow-xl shadow-slate-900/10 backdrop-blur">
+								<div className="mb-2 flex items-center justify-between px-2 py-1">
+									<span className="text-xs font-bold text-slate-700">
+										外观设置
+									</span>
+									<span className="text-[11px] text-slate-400">
+										{fontSizePt}pt · {pageMarginMm}mm
+									</span>
+								</div>
+								<div className="grid gap-2">
+									<ThemePicker
+										current={themeId}
+										favoriteThemeIds={favoriteThemeIds}
+										onChange={handleThemeChange}
+										onToggleFavorite={handleToggleFavoriteTheme}
+									/>
+									<FontSizeControl
+										value={fontSizePt}
+										onChange={handleFontSizeChange}
+									/>
+									<PageMarginControl
+										value={pageMarginMm}
+										onChange={handlePageMarginChange}
+									/>
+								</div>
+							</div>
+						)}
+					</div>
 					<PreviewZoomControl value={previewZoom} onChange={setPreviewZoom} />
 					<span className="ml-1 shrink-0 rounded-full border border-slate-200/60 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-slate-400 opacity-80 backdrop-blur-sm">
 						预计 {previewPageCount} 页
@@ -998,7 +1084,10 @@ function App() {
 			</div>
 
 			{leftPanelOpen ? (
-				<div className="p-3 print:hidden lg:pointer-events-none lg:fixed lg:inset-y-4 lg:left-4 lg:z-40 lg:w-[330px] lg:p-0 xl:w-[360px]">
+				<div
+					className="p-3 print:hidden lg:pointer-events-none lg:fixed lg:inset-y-4 lg:left-4 lg:z-40 lg:w-[330px] lg:p-0 xl:w-[360px]"
+					data-workbench-chrome="true"
+				>
 					<aside className="pointer-events-auto flex overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xl shadow-slate-900/10 backdrop-blur lg:h-full">
 						<div className="flex min-w-0 flex-1 flex-col">
 							<div className="shrink-0 border-b border-slate-200 px-3 py-3">
@@ -1110,6 +1199,7 @@ function App() {
 					className="fixed left-3 top-3 z-50 hidden h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-500 shadow-lg shadow-slate-900/10 backdrop-blur transition hover:bg-white hover:text-slate-800 print:hidden lg:flex"
 					title="展开左侧面板"
 					aria-label="展开左侧面板"
+					data-workbench-chrome="true"
 				>
 					<PanelLeftOpen size={17} />
 				</button>
@@ -1117,6 +1207,8 @@ function App() {
 
 			<main
 				ref={canvasScrollRef}
+				tabIndex={-1}
+				aria-label="简历预览画布"
 				className={`min-h-[70vh] overflow-auto bg-slate-100 print:block print:min-h-0 print:overflow-visible print:bg-white lg:h-screen scrollbar-none ${canvasPanClass}`}
 				onPointerDown={handleCanvasPointerDown}
 				onPointerMove={handleCanvasPointerMove}
@@ -1176,7 +1268,10 @@ function App() {
 			</main>
 
 			{rightPanelOpen ? (
-				<div className="p-3 pt-0 print:hidden lg:pointer-events-none lg:fixed lg:inset-y-4 lg:right-4 lg:z-40 lg:w-[370px] lg:p-0 xl:w-[400px]">
+				<div
+					className="p-3 pt-0 print:hidden lg:pointer-events-none lg:fixed lg:inset-y-4 lg:right-4 lg:z-40 lg:w-[370px] lg:p-0 xl:w-[400px]"
+					data-workbench-chrome="true"
+				>
 					<aside className="pointer-events-auto relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xl shadow-slate-900/10 backdrop-blur lg:h-full">
 						<button
 							type="button"
@@ -1205,15 +1300,19 @@ function App() {
 					className="fixed right-3 top-3 z-50 hidden h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-500 shadow-lg shadow-slate-900/10 backdrop-blur transition hover:bg-white hover:text-slate-800 print:hidden lg:flex"
 					title="展开右侧面板"
 					aria-label="展开右侧面板"
+					data-workbench-chrome="true"
 				>
 					<PanelRightOpen size={17} />
 				</button>
 			)}
 
 			<div
-				className={`fixed bottom-5 right-5 z-50 flex items-center gap-1.5 rounded-full border border-slate-200/50 bg-white/50 px-2 py-1 text-[10px] text-slate-400 opacity-70 shadow-sm backdrop-blur transition hover:opacity-95 print:hidden ${
+				className={`fixed bottom-5 right-5 z-50 flex items-center gap-1.5 rounded-full border border-slate-200/50 bg-white/50 px-2 py-1 text-[10px] text-slate-400 shadow-sm backdrop-blur transition hover:opacity-95 print:hidden ${
+					canvasShortcutsActive ? "opacity-75" : "opacity-35"
+				} ${
 					rightPanelOpen ? "lg:right-[420px] xl:right-[450px]" : ""
 				}`}
+				data-workbench-chrome="true"
 			>
 				<Hand size={12} />
 				<span>
