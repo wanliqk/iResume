@@ -1,16 +1,29 @@
 import {
 	Download,
 	Github,
+	Hand,
 	ImageDown,
+	PanelLeftClose,
+	PanelLeftOpen,
+	PanelRightClose,
+	PanelRightOpen,
 	Printer,
 	RotateCcw,
 	Tags,
 	TrendingUp,
 	Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	type PointerEvent as ReactPointerEvent,
+	type ReactNode,
+} from "react";
 import FontSizeControl from "./components/FontSizeControl";
 import PageMarginControl from "./components/PageMarginControl";
+import PreviewZoomControl from "./components/PreviewZoomControl";
 import ResumeEditor from "./components/ResumeEditor";
 import ResumeManager from "./components/ResumeManager";
 import ResumePreview from "./components/ResumePreview";
@@ -35,6 +48,12 @@ import {
 	type ResumeLibrary,
 } from "./data/resumeLibrary";
 import {
+	DEFAULT_PREVIEW_ZOOM,
+	getAdjacentPreviewZoom,
+	normalizePreviewZoom,
+	type PreviewZoom,
+} from "./data/previewZoom";
+import {
 	DEFAULT_RESUME_FONT_SIZE_PT,
 	DEFAULT_RESUME_PAGE_MARGIN_MM,
 	normalizeResumeFontSize,
@@ -48,7 +67,7 @@ import {
 	isThemeId,
 	normalizeThemeIdList,
 } from "./data/themes";
-import type { ResumeData, SectionIconVisibility } from "./types/resume";
+import type { ResumeData, SectionIconVisibility, SectionKey } from "./types/resume";
 import type { ThemeId } from "./types/theme";
 
 const STORAGE_KEY = "resume-data";
@@ -56,8 +75,10 @@ const THEME_STORAGE_KEY = "resume-theme";
 const FONT_SIZE_STORAGE_KEY = "resume-font-size";
 const PAGE_MARGIN_STORAGE_KEY = "resume-page-margin";
 const SECTION_ICONS_STORAGE_KEY = "resume-section-icons";
+const SECTION_ICONS_UNIFIED_MIGRATION_KEY = "resume-section-icons-unified-v2";
 const FAVORITE_THEMES_STORAGE_KEY = "resume-favorite-themes";
 const LIBRARY_STORAGE_KEY = "resume-library";
+const PREVIEW_ZOOM_STORAGE_KEY = "resume-preview-zoom";
 const A4_HEIGHT_MM = 297;
 const A4_WIDTH_MM = 210;
 
@@ -76,13 +97,45 @@ interface ResumeMetaEditorProps {
 const metaInputClass =
 	"w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500";
 
+const WorkbenchIconButton = ({
+	label,
+	children,
+	onClick,
+	disabled,
+	variant = "ghost",
+}: {
+	label: string;
+	children: ReactNode;
+	onClick: () => void;
+	disabled?: boolean;
+	variant?: "ghost" | "primary";
+}) => (
+	<button
+		type="button"
+		onClick={onClick}
+		disabled={disabled}
+		className={`group relative flex h-9 items-center justify-center rounded-md transition disabled:cursor-wait disabled:opacity-50 ${
+			variant === "primary"
+				? "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+				: "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+		}`}
+		title={label}
+		aria-label={label}
+	>
+		{children}
+		<span className="pointer-events-none absolute -top-8 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white/95 px-2 py-1 text-[11px] font-medium text-slate-500 opacity-0 shadow-lg shadow-slate-900/10 transition group-hover:opacity-100">
+			{label}
+		</span>
+	</button>
+);
+
 const ResumeMetaEditor = ({ document, onUpdate }: ResumeMetaEditorProps) => (
-	<div className="border-b border-slate-200 bg-white p-4 sm:p-5 lg:p-6">
-		<div className="mb-3">
+	<div className="border-b border-slate-200 p-4">
+		<div className="mb-3 flex items-center justify-between gap-2">
 			<h2 className="text-sm font-bold text-slate-800">简历信息</h2>
-			<p className="mt-1 text-xs text-slate-400">
-				管理名称、标签和版本号
-			</p>
+			<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-400">
+				v{document.version}
+			</span>
 		</div>
 
 		<label className="mb-3 block">
@@ -192,24 +245,65 @@ function readLegacyResumeDocument(): ResumeDocument {
 	});
 }
 
+function migrateUnifiedSectionIcons(library: ResumeLibrary): ResumeLibrary {
+	if (localStorage.getItem(SECTION_ICONS_UNIFIED_MIGRATION_KEY)) return library;
+	localStorage.setItem(SECTION_ICONS_UNIFIED_MIGRATION_KEY, "1");
+
+	return {
+		...library,
+		documents: library.documents.map((document) => {
+			const hasVisibleIcon = Object.values(document.appearance.sectionIcons).some(
+				Boolean,
+			);
+			if (hasVisibleIcon) return document;
+
+			return {
+				...document,
+				appearance: {
+					...document.appearance,
+					sectionIcons: getDefaultSectionIconVisibility(
+						document.appearance.themeId,
+					),
+				},
+			};
+		}),
+	};
+}
+
 function readInitialLibrary(): ResumeLibrary {
 	const legacyDocument = readLegacyResumeDocument();
 	const savedLibrary = localStorage.getItem(LIBRARY_STORAGE_KEY);
 	if (savedLibrary) {
 		try {
-			return normalizeResumeLibrary(JSON.parse(savedLibrary), legacyDocument);
+			return migrateUnifiedSectionIcons(
+				normalizeResumeLibrary(JSON.parse(savedLibrary), legacyDocument),
+			);
 		} catch {
-			return createResumeLibrary([legacyDocument], legacyDocument.id);
+			return migrateUnifiedSectionIcons(
+				createResumeLibrary([legacyDocument], legacyDocument.id),
+			);
 		}
 	}
 
-	return createResumeLibrary([legacyDocument], legacyDocument.id);
+	return migrateUnifiedSectionIcons(
+		createResumeLibrary([legacyDocument], legacyDocument.id),
+	);
 }
 
 function App() {
 	const importInputRef = useRef<HTMLInputElement>(null);
 	const resumePreviewRef = useRef<HTMLDivElement>(null);
 	const resumePreviewInnerRef = useRef<HTMLDivElement>(null);
+	const canvasScrollRef = useRef<HTMLDivElement>(null);
+	const isPrintingRef = useRef(false);
+	const wheelZoomLastAtRef = useRef(0);
+	const panStateRef = useRef<{
+		pointerId: number;
+		startX: number;
+		startY: number;
+		scrollLeft: number;
+		scrollTop: number;
+	} | null>(null);
 	const [view, setView] = useState<AppView>("manager");
 	const [library, setLibrary] = useState<ResumeLibrary>(readInitialLibrary);
 	const [importError, setImportError] = useState<string | null>(null);
@@ -217,6 +311,16 @@ function App() {
 		"idle" | "exporting" | "error"
 	>("idle");
 	const [previewPageCount, setPreviewPageCount] = useState(1);
+	const [activeSection, setActiveSection] = useState<SectionKey>("skills");
+	const [isSpacePanning, setIsSpacePanning] = useState(false);
+	const [isPanning, setIsPanning] = useState(false);
+	const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+	const [rightPanelOpen, setRightPanelOpen] = useState(true);
+	const [previewZoom, setPreviewZoom] = useState<PreviewZoom>(() =>
+		normalizePreviewZoom(
+			localStorage.getItem(PREVIEW_ZOOM_STORAGE_KEY) ?? DEFAULT_PREVIEW_ZOOM,
+		),
+	);
 
 	const activeDocument =
 		library.documents.find((document) => document.id === library.activeId) ??
@@ -258,6 +362,145 @@ function App() {
 			JSON.stringify(favoriteThemeIds),
 		);
 	}, [favoriteThemeIds]);
+
+	useEffect(() => {
+		localStorage.setItem(PREVIEW_ZOOM_STORAGE_KEY, String(previewZoom));
+	}, [previewZoom]);
+
+	useEffect(() => {
+		if (view !== "editor") return;
+
+		const frame = requestAnimationFrame(() => {
+			const node = canvasScrollRef.current;
+			const preview = node?.querySelector(".resume-preview-scale-shell");
+			if (!node || !preview) return;
+
+			const targetLeft = window.innerWidth >= 1024 ? 400 : 16;
+			const previewLeft = preview.getBoundingClientRect().left;
+			node.scrollLeft += previewLeft - targetLeft;
+		});
+
+		return () => cancelAnimationFrame(frame);
+	}, [activeDocument.id, previewZoom, view]);
+
+	useEffect(() => {
+		if (!resumeData.sectionOrder.includes(activeSection)) {
+			setActiveSection(resumeData.sectionOrder[0] ?? "skills");
+		}
+	}, [activeSection, resumeData.sectionOrder]);
+
+	useEffect(() => {
+		if (view !== "editor") return;
+
+		const isEditableTarget = (target: EventTarget | null) => {
+			if (!(target instanceof HTMLElement)) return false;
+			const tagName = target.tagName.toLowerCase();
+			return (
+				target.isContentEditable ||
+				tagName === "input" ||
+				tagName === "textarea" ||
+				tagName === "select"
+			);
+		};
+
+		const isSpaceKey = (event: KeyboardEvent) =>
+			event.code === "Space" ||
+			event.key === " " ||
+			event.key === "Spacebar" ||
+			event.key === "Space";
+
+		const syncSpacePanningClass = (enabled: boolean) => {
+			document.documentElement.classList.toggle("resume-space-panning", enabled);
+			document.body.classList.toggle("resume-space-panning", enabled);
+		};
+
+		const releaseHand = () => {
+			panStateRef.current = null;
+			setIsPanning(false);
+			setIsSpacePanning(false);
+			syncSpacePanningClass(false);
+		};
+
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (isEditableTarget(event.target)) return;
+
+			if (isSpaceKey(event)) {
+				event.preventDefault();
+				event.stopPropagation();
+				if (!event.repeat) setIsSpacePanning(true);
+				if (!event.repeat) syncSpacePanningClass(true);
+				return;
+			}
+
+			if (!(event.metaKey || event.ctrlKey)) return;
+
+			if (event.key === "=" || event.key === "+") {
+				event.preventDefault();
+				event.stopPropagation();
+				setPreviewZoom((current) => getAdjacentPreviewZoom(current, "larger"));
+			}
+
+			if (event.key === "-") {
+				event.preventDefault();
+				event.stopPropagation();
+				setPreviewZoom((current) => getAdjacentPreviewZoom(current, "smaller"));
+			}
+
+			if (event.key === "0") {
+				event.preventDefault();
+				event.stopPropagation();
+				setPreviewZoom(DEFAULT_PREVIEW_ZOOM);
+			}
+		};
+
+		const handleKeyUp = (event: KeyboardEvent) => {
+			if (!isSpaceKey(event)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			panStateRef.current = null;
+			setIsPanning(false);
+			setIsSpacePanning(false);
+			syncSpacePanningClass(false);
+		};
+
+		const handleWheel = (event: WheelEvent) => {
+			if (!(event.metaKey || event.ctrlKey) || event.deltaY === 0) return;
+
+			event.preventDefault();
+			event.stopPropagation();
+
+			const now = window.performance.now();
+			if (now - wheelZoomLastAtRef.current < 70) return;
+			wheelZoomLastAtRef.current = now;
+
+			setPreviewZoom((current) =>
+				getAdjacentPreviewZoom(
+					current,
+					event.deltaY < 0 ? "larger" : "smaller",
+				),
+			);
+		};
+
+		window.addEventListener("keydown", handleKeyDown, true);
+		document.addEventListener("keydown", handleKeyDown, true);
+		window.addEventListener("keyup", handleKeyUp, true);
+		document.addEventListener("keyup", handleKeyUp, true);
+		window.addEventListener("blur", releaseHand);
+		window.addEventListener("wheel", handleWheel, {
+			capture: true,
+			passive: false,
+		});
+
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown, true);
+			document.removeEventListener("keydown", handleKeyDown, true);
+			window.removeEventListener("keyup", handleKeyUp, true);
+			document.removeEventListener("keyup", handleKeyUp, true);
+			window.removeEventListener("blur", releaseHand);
+			window.removeEventListener("wheel", handleWheel, true);
+			releaseHand();
+		};
+	}, [view]);
 
 	const handleToggleFavoriteTheme = (id: ThemeId) => {
 		setFavoriteThemeIds((current) =>
@@ -349,6 +592,46 @@ function App() {
 		}));
 	};
 
+	const handleCanvasPointerDown = (
+		event: ReactPointerEvent<HTMLDivElement>,
+	) => {
+		if (!isSpacePanning || event.button !== 0) return;
+		const node = canvasScrollRef.current;
+		if (!node) return;
+
+		event.preventDefault();
+		panStateRef.current = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			scrollLeft: node.scrollLeft,
+			scrollTop: node.scrollTop,
+		};
+		setIsPanning(true);
+		event.currentTarget.setPointerCapture(event.pointerId);
+	};
+
+	const handleCanvasPointerMove = (
+		event: ReactPointerEvent<HTMLDivElement>,
+	) => {
+		const state = panStateRef.current;
+		const node = canvasScrollRef.current;
+		if (!state || !node || state.pointerId !== event.pointerId) return;
+
+		event.preventDefault();
+		node.scrollLeft = state.scrollLeft - (event.clientX - state.startX);
+		node.scrollTop = state.scrollTop - (event.clientY - state.startY);
+	};
+
+	const stopCanvasPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+		if (panStateRef.current?.pointerId !== event.pointerId) return;
+		panStateRef.current = null;
+		setIsPanning(false);
+		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+	};
+
 	const handleCreateResume = (input: { name: string; tags: string[] }) => {
 		const nextDocument = createResumeDocument({
 			name: input.name,
@@ -435,6 +718,7 @@ function App() {
 	};
 
 	const measurePreviewPages = useCallback(() => {
+		if (isPrintingRef.current) return;
 		const preview = resumePreviewRef.current;
 		const inner = resumePreviewInnerRef.current;
 		if (!preview || !inner) return;
@@ -499,14 +783,55 @@ function App() {
 		const name =
 			resumeData.personal.name.trim() || activeDocument.name.trim() || "简历";
 		const originalTitle = document.title;
+		const canvasNode = canvasScrollRef.current;
+		const savedScroll = canvasNode
+			? {
+					left: canvasNode.scrollLeft,
+					top: canvasNode.scrollTop,
+				}
+			: null;
+		const savedWindowScroll = {
+			left: window.scrollX,
+			top: window.scrollY,
+		};
+
 		document.title = `${name} - iResume 简历`;
 
+		const restoreCanvasScroll = () => {
+			const restore = () => {
+				const nextCanvasNode = canvasScrollRef.current;
+				if (nextCanvasNode && savedScroll) {
+					nextCanvasNode.scrollLeft = savedScroll.left;
+					nextCanvasNode.scrollTop = savedScroll.top;
+				}
+				window.scrollTo(savedWindowScroll.left, savedWindowScroll.top);
+			};
+
+			requestAnimationFrame(() => {
+				restore();
+				requestAnimationFrame(restore);
+			});
+			window.setTimeout(restore, 80);
+		};
+
+		const preparePrint = () => {
+			isPrintingRef.current = true;
+			if (document.activeElement instanceof HTMLElement) {
+				document.activeElement.blur();
+			}
+		};
+
 		const restore = () => {
+			isPrintingRef.current = false;
 			document.title = originalTitle;
+			restoreCanvasScroll();
+			window.removeEventListener("beforeprint", preparePrint);
 			window.removeEventListener("afterprint", restore);
 		};
+		window.addEventListener("beforeprint", preparePrint);
 		window.addEventListener("afterprint", restore);
 
+		preparePrint();
 		window.print();
 	}, [activeDocument.name, resumeData.personal.name]);
 
@@ -540,14 +865,12 @@ function App() {
 		setImageExportStatus("exporting");
 		try {
 			const { toPng } = await import("html-to-image");
-			const nodeRect = node.getBoundingClientRect();
-			const innerRect = inner.getBoundingClientRect();
 			const styles = window.getComputedStyle(node);
 			const paddingBottom = Number.parseFloat(styles.paddingBottom) || 0;
 			const exportHeight = Math.ceil(
-				innerRect.bottom - nodeRect.top + paddingBottom,
+				inner.offsetTop + inner.offsetHeight + paddingBottom,
 			);
-			const exportWidth = Math.ceil(nodeRect.width);
+			const exportWidth = Math.ceil(node.offsetWidth);
 			const dataUrl = await toPng(node, {
 				backgroundColor: "#ffffff",
 				cacheBust: true,
@@ -633,124 +956,19 @@ function App() {
 		);
 	}
 
+	const canvasPanClass = isPanning
+		? "canvas-panning"
+		: isSpacePanning
+			? "canvas-pan-ready"
+			: "";
+	const toolbarFrameClass = [
+		"fixed left-3 right-3 top-3 z-50 flex justify-center pointer-events-none print:hidden",
+		leftPanelOpen ? "lg:left-[392px] xl:left-[416px]" : "lg:left-14",
+		rightPanelOpen ? "lg:right-[424px] xl:right-[448px]" : "lg:right-14",
+	].join(" ");
+
 	return (
-		<div className="min-h-screen bg-slate-100 print:bg-white font-sans text-slate-900">
-			<nav className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2.5 shadow-sm print:hidden sm:px-4 lg:px-6">
-				<div className="flex items-center gap-4">
-					<button
-						type="button"
-						onClick={() => setView("manager")}
-						className="flex items-center gap-2 rounded-md font-bold text-xl transition hover:opacity-75"
-						title="返回简历库"
-					>
-						<span className="inline-flex items-center justify-center bg-blue-600 text-white px-2 py-1 rounded text-sm font-black leading-none tracking-tight">
-							i
-						</span>
-						<span className="leading-none">Resume</span>
-					</button>
-
-					<span className="hidden max-w-[240px] truncate text-xs font-medium text-slate-400 xl:block">
-						{activeDocument.name} · v{activeDocument.version}
-					</span>
-
-					<a
-						href="https://github.com/dogxii/iResume"
-						target="_blank"
-						rel="noreferrer"
-						aria-label="GitHub 仓库"
-						className="hidden lg:flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-700 transition-colors"
-					>
-						<Github size={18} />
-					</a>
-				</div>
-
-				<div className="flex flex-wrap items-center justify-end gap-2">
-					{importError && (
-						<span className="text-xs text-red-500 bg-red-50 border border-red-200 px-3 py-1.5 rounded-md">
-							{importError}
-						</span>
-					)}
-					{imageExportStatus === "error" && (
-						<span className="text-xs text-red-500 bg-red-50 border border-red-200 px-3 py-1.5 rounded-md">
-							图片导出失败
-						</span>
-					)}
-
-					<ThemePicker
-						current={themeId}
-						favoriteThemeIds={favoriteThemeIds}
-						onChange={handleThemeChange}
-						onToggleFavorite={handleToggleFavoriteTheme}
-					/>
-					<FontSizeControl
-						value={fontSizePt}
-						onChange={handleFontSizeChange}
-					/>
-					<PageMarginControl
-						value={pageMarginMm}
-						onChange={handlePageMarginChange}
-					/>
-
-					<div className="w-px h-5 bg-slate-200" />
-
-					<button
-						type="button"
-						onClick={handleReset}
-						className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-						title="重置为默认模版"
-					>
-						<RotateCcw size={16} />
-						<span className="hidden sm:inline">重置</span>
-					</button>
-
-					<div className="w-px h-5 bg-slate-200" />
-
-					<button
-						type="button"
-						onClick={handleImportClick}
-						className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-						title="从 JSON 文件导入简历数据"
-					>
-						<Upload size={16} />
-						<span className="hidden sm:inline">导入</span>
-					</button>
-
-					<button
-						type="button"
-						onClick={handleExport}
-						className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-						title="导出当前简历数据为 JSON 文件"
-					>
-						<Download size={16} />
-						<span className="hidden sm:inline">导出</span>
-					</button>
-
-					<button
-						type="button"
-						onClick={handleExportImage}
-						disabled={imageExportStatus === "exporting"}
-						className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors disabled:cursor-wait disabled:opacity-60 sm:px-4"
-						title="导出当前简历为 PNG 图片"
-					>
-						<ImageDown size={16} />
-						<span className="hidden sm:inline">
-							{imageExportStatus === "exporting" ? "导出中" : "图片"}
-						</span>
-					</button>
-
-					<div className="w-px h-5 bg-slate-200" />
-
-					<button
-						type="button"
-						onClick={handlePrint}
-						className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm transition-colors sm:px-4"
-					>
-						<Printer size={16} />
-						<span>保存 PDF</span>
-					</button>
-				</div>
-			</nav>
-
+		<div className="relative min-h-screen bg-slate-100 font-sans text-slate-900 print:bg-white lg:h-screen lg:overflow-hidden">
 			<input
 				ref={importInputRef}
 				type="file"
@@ -759,61 +977,259 @@ function App() {
 				onChange={handleImportFile}
 			/>
 
-			<main className="mx-auto flex min-h-[calc(100vh-64px)] max-w-[1600px] flex-col print:block print:h-auto print:max-w-none lg:h-[calc(100vh-60px)] lg:flex-row">
-				<div className="w-full shrink-0 border-b border-slate-200 bg-white print:hidden lg:h-full lg:w-[420px] lg:overflow-y-auto lg:border-b-0 lg:border-r xl:w-[450px] custom-scrollbar">
-					<ResumeMetaEditor
-						key={activeDocument.id}
-						document={activeDocument}
-						onUpdate={(meta) =>
-							handleUpdateResumeMeta(activeDocument.id, meta)
-						}
+			<div className={toolbarFrameClass}>
+				<div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/60 bg-white/80 px-1.5 py-1 shadow-md shadow-slate-900/5 backdrop-blur scrollbar-none">
+					<ThemePicker
+						current={themeId}
+						favoriteThemeIds={favoriteThemeIds}
+						onChange={handleThemeChange}
+						onToggleFavorite={handleToggleFavoriteTheme}
 					/>
-					<ResumeEditor
-						data={resumeData}
-						sectionIcons={sectionIcons}
-						onChange={handleResumeDataChange}
-						onSectionIconsChange={handleSectionIconsChange}
+					<FontSizeControl value={fontSizePt} onChange={handleFontSizeChange} />
+					<PageMarginControl
+						value={pageMarginMm}
+						onChange={handlePageMarginChange}
 					/>
+					<PreviewZoomControl value={previewZoom} onChange={setPreviewZoom} />
+					<span className="ml-1 shrink-0 rounded-full border border-slate-200/60 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-slate-400 opacity-80 backdrop-blur-sm">
+						预计 {previewPageCount} 页
+					</span>
 				</div>
+			</div>
 
-				<div className="flex-1 overflow-auto bg-slate-100 p-3 print:block print:h-auto print:flex-none print:overflow-visible print:bg-transparent print:p-0 sm:p-5 lg:h-full lg:p-8">
-					<div className="mx-auto w-fit">
-						<div className="sticky top-2 z-20 mb-3 flex justify-end print:hidden">
-							<span className="rounded-full border border-slate-200/60 bg-white/70 px-3 py-1 text-xs font-medium text-slate-400 opacity-80 shadow-sm backdrop-blur-sm">
-								预计 {previewPageCount} 页
-							</span>
+			{leftPanelOpen ? (
+				<div className="p-3 print:hidden lg:pointer-events-none lg:fixed lg:inset-y-4 lg:left-4 lg:z-40 lg:w-[330px] lg:p-0 xl:w-[360px]">
+					<aside className="pointer-events-auto flex overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xl shadow-slate-900/10 backdrop-blur lg:h-full">
+						<div className="flex min-w-0 flex-1 flex-col">
+							<div className="shrink-0 border-b border-slate-200 px-3 py-3">
+								<div className="flex items-center justify-between gap-3">
+									<button
+										type="button"
+										onClick={() => setView("manager")}
+										className="flex items-center gap-2 rounded-md text-xl font-bold transition hover:opacity-75"
+										title="返回简历库"
+										aria-label="返回简历库"
+									>
+										<span className="inline-flex items-center justify-center rounded bg-blue-600 px-2 py-1 text-sm font-black leading-none tracking-tight text-white">
+											i
+										</span>
+										<span className="leading-none">Resume</span>
+									</button>
+									<div className="flex items-center gap-1">
+										<a
+											href="https://github.com/dogxii/iResume"
+											target="_blank"
+											rel="noreferrer"
+											aria-label="GitHub 仓库"
+											className="flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-100 hover:text-slate-700"
+										>
+											<Github size={17} />
+										</a>
+										<button
+											type="button"
+											onClick={() => setLeftPanelOpen(false)}
+											className="flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-100 hover:text-slate-700"
+											title="折叠左侧面板"
+											aria-label="折叠左侧面板"
+										>
+											<PanelLeftClose size={17} />
+										</button>
+									</div>
+								</div>
+
+								<div className="mt-3 grid grid-cols-5 gap-1.5">
+									<WorkbenchIconButton label="重置" onClick={handleReset}>
+										<RotateCcw size={16} />
+									</WorkbenchIconButton>
+									<WorkbenchIconButton
+										label="导入 JSON"
+										onClick={handleImportClick}
+									>
+										<Upload size={16} />
+									</WorkbenchIconButton>
+									<WorkbenchIconButton label="导出 JSON" onClick={handleExport}>
+										<Download size={16} />
+									</WorkbenchIconButton>
+									<WorkbenchIconButton
+										label={
+											imageExportStatus === "exporting"
+												? "图片导出中"
+												: "导出图片"
+										}
+										onClick={handleExportImage}
+										disabled={imageExportStatus === "exporting"}
+									>
+										<ImageDown size={16} />
+									</WorkbenchIconButton>
+									<WorkbenchIconButton
+										label="保存 PDF"
+										onClick={handlePrint}
+										variant="primary"
+									>
+										<Printer size={16} />
+									</WorkbenchIconButton>
+								</div>
+
+								{importError && (
+									<div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-500">
+										{importError}
+									</div>
+								)}
+								{imageExportStatus === "error" && (
+									<div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-500">
+										图片导出失败
+									</div>
+								)}
+							</div>
+
+							<div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+								<ResumeMetaEditor
+									key={activeDocument.id}
+									document={activeDocument}
+									onUpdate={(meta) =>
+										handleUpdateResumeMeta(activeDocument.id, meta)
+									}
+								/>
+								<ResumeEditor
+									data={resumeData}
+									sectionIcons={sectionIcons}
+									panel="structure"
+									activeSection={activeSection}
+									onActiveSectionChange={setActiveSection}
+									onChange={handleResumeDataChange}
+									onSectionIconsChange={handleSectionIconsChange}
+								/>
+							</div>
 						</div>
-						<div
-							className="relative w-[210mm] bg-white shadow-2xl print:w-full print:min-h-0 print:bg-white print:shadow-none"
-							style={{ minHeight: `${previewPageCount * A4_HEIGHT_MM}mm` }}
-						>
-							<ResumePreview
-								ref={resumePreviewRef}
-								contentRef={resumePreviewInnerRef}
-								data={resumeData}
-								themeId={themeId}
-								fontSizePt={fontSizePt}
-								pageMarginMm={pageMarginMm}
-								sectionIcons={sectionIcons}
-								minPageCount={previewPageCount}
-							/>
-							{Array.from({ length: previewPageCount - 1 }, (_, index) => (
+					</aside>
+				</div>
+			) : (
+				<button
+					type="button"
+					onClick={() => setLeftPanelOpen(true)}
+					className="fixed left-3 top-3 z-50 hidden h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-500 shadow-lg shadow-slate-900/10 backdrop-blur transition hover:bg-white hover:text-slate-800 print:hidden lg:flex"
+					title="展开左侧面板"
+					aria-label="展开左侧面板"
+				>
+					<PanelLeftOpen size={17} />
+				</button>
+			)}
+
+			<main
+				ref={canvasScrollRef}
+				className={`min-h-[70vh] overflow-auto bg-slate-100 print:block print:min-h-0 print:overflow-visible print:bg-white lg:h-screen scrollbar-none ${canvasPanClass}`}
+				onPointerDown={handleCanvasPointerDown}
+				onPointerMove={handleCanvasPointerMove}
+				onPointerUp={stopCanvasPan}
+				onPointerCancel={stopCanvasPan}
+				onLostPointerCapture={stopCanvasPan}
+			>
+				<div className="min-h-full p-4 pt-20 print:p-0 sm:p-5 sm:pt-20 lg:min-w-[calc(100vw+760px)] lg:px-[360px] lg:pb-5 lg:pt-20 xl:px-[400px]">
+					<div className="flex min-h-full justify-center pb-20">
+						<div className="mx-auto w-fit">
+							<div
+								className="resume-preview-scale-shell print:w-auto"
+								style={{
+									height: `${previewPageCount * A4_HEIGHT_MM * previewZoom}mm`,
+									width: `${A4_WIDTH_MM * previewZoom}mm`,
+								}}
+							>
 								<div
-									key={index}
-									className="pointer-events-none absolute left-0 right-0 z-10 border-t border-dashed border-blue-300/35 print:hidden"
+									className="resume-preview-scale relative w-[210mm] bg-white shadow-2xl print:w-full print:min-h-0 print:bg-white print:shadow-none"
 									style={{
-										top: `${pageMarginMm + (index + 1) * printablePageHeightMm}mm`,
+										minHeight: `${previewPageCount * A4_HEIGHT_MM}mm`,
+										transform: `scale(${previewZoom})`,
+										transformOrigin: "top left",
 									}}
 								>
-									<span className="absolute right-3 -top-3 rounded-full border border-blue-100/70 bg-white/70 px-2 py-0.5 text-[10px] font-medium text-blue-400/75 opacity-80 shadow-sm backdrop-blur-sm">
-										第 {index + 2} 页
-									</span>
+									<ResumePreview
+										ref={resumePreviewRef}
+										contentRef={resumePreviewInnerRef}
+										data={resumeData}
+										themeId={themeId}
+										fontSizePt={fontSizePt}
+										pageMarginMm={pageMarginMm}
+										sectionIcons={sectionIcons}
+										minPageCount={previewPageCount}
+									/>
+									{Array.from(
+										{ length: previewPageCount - 1 },
+										(_, index) => (
+											<div
+												key={index}
+												className="pointer-events-none absolute left-0 right-0 z-10 border-t border-dashed border-blue-300/35 print:hidden"
+												style={{
+													top: `${pageMarginMm + (index + 1) * printablePageHeightMm}mm`,
+												}}
+											>
+												<span className="absolute right-3 -top-3 rounded-full border border-blue-100/70 bg-white/70 px-2 py-0.5 text-[10px] font-medium text-blue-400/75 opacity-80 shadow-sm backdrop-blur-sm">
+													第 {index + 2} 页
+												</span>
+											</div>
+										),
+									)}
 								</div>
-							))}
+							</div>
 						</div>
 					</div>
 				</div>
 			</main>
+
+			{rightPanelOpen ? (
+				<div className="p-3 pt-0 print:hidden lg:pointer-events-none lg:fixed lg:inset-y-4 lg:right-4 lg:z-40 lg:w-[370px] lg:p-0 xl:w-[400px]">
+					<aside className="pointer-events-auto relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xl shadow-slate-900/10 backdrop-blur lg:h-full">
+						<button
+							type="button"
+							onClick={() => setRightPanelOpen(false)}
+							className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-100 hover:text-slate-700"
+							title="折叠右侧面板"
+							aria-label="折叠右侧面板"
+						>
+							<PanelRightClose size={17} />
+						</button>
+						<ResumeEditor
+							data={resumeData}
+							sectionIcons={sectionIcons}
+							panel="details"
+							activeSection={activeSection}
+							onActiveSectionChange={setActiveSection}
+							onChange={handleResumeDataChange}
+							onSectionIconsChange={handleSectionIconsChange}
+						/>
+					</aside>
+				</div>
+			) : (
+				<button
+					type="button"
+					onClick={() => setRightPanelOpen(true)}
+					className="fixed right-3 top-3 z-50 hidden h-9 w-9 items-center justify-center rounded-lg border border-slate-200/80 bg-white/80 text-slate-500 shadow-lg shadow-slate-900/10 backdrop-blur transition hover:bg-white hover:text-slate-800 print:hidden lg:flex"
+					title="展开右侧面板"
+					aria-label="展开右侧面板"
+				>
+					<PanelRightOpen size={17} />
+				</button>
+			)}
+
+			<div
+				className={`fixed bottom-5 right-5 z-50 flex items-center gap-1.5 rounded-full border border-slate-200/50 bg-white/50 px-2 py-1 text-[10px] text-slate-400 opacity-70 shadow-sm backdrop-blur transition hover:opacity-95 print:hidden ${
+					rightPanelOpen ? "lg:right-[420px] xl:right-[450px]" : ""
+				}`}
+			>
+				<Hand size={12} />
+				<span>
+					<kbd className="rounded border border-current/20 px-1 font-mono text-[9px]">
+						Space
+					</kbd>{" "}
+					抓手
+				</span>
+				<span className="hidden sm:inline text-slate-300">·</span>
+				<span className="hidden sm:inline">
+					<kbd className="rounded border border-current/20 px-1 font-mono text-[9px]">
+						⌘/Ctrl
+					</kbd>{" "}
+					+ 滚轮缩放
+				</span>
+			</div>
 		</div>
 	);
 }

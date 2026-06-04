@@ -13,18 +13,49 @@
 }
 
 /* 自定义滚动条样式 */
+.custom-scrollbar {
+	scrollbar-width: thin;
+	scrollbar-color: rgb(148 163 184 / 28%) transparent;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-	width: 6px;
+	width: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-	background: #f1f5f9;
+	background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-	background: #cbd5e1;
-	border-radius: 3px;
+	background: rgb(148 163 184 / 0%);
+	border-radius: 999px;
 }
+.custom-scrollbar:hover::-webkit-scrollbar-thumb,
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-	background: #94a3b8;
+	background: rgb(148 163 184 / 35%);
+}
+
+.scrollbar-none {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+	display: none;
+}
+
+html.resume-space-panning,
+body.resume-space-panning {
+	overflow: hidden;
+}
+
+.canvas-pan-ready,
+.canvas-pan-ready * {
+	cursor: grab !important;
+}
+
+.canvas-panning,
+.canvas-panning * {
+	cursor: grabbing !important;
+	user-select: none !important;
 }
 
 /* =====================================================
@@ -90,6 +121,15 @@
 	}
 
 	/* A4 纸张容器：去掉固定宽高和阴影，让内容自由流动 */
+	.resume-preview-scale-shell {
+		width: auto !important;
+		height: auto !important;
+	}
+
+	.resume-preview-scale {
+		transform: none !important;
+	}
+
 	.print\:shadow-none {
 		box-shadow: none !important;
 	}

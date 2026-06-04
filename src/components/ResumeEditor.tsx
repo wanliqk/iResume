@@ -1,5 +1,15 @@
-import { ArrowDown, ArrowUp, ChevronDown, Plus, Trash2 } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import {
+	ArrowDown,
+	ArrowUp,
+	BriefcaseBusiness,
+	FileText,
+	FolderGit2,
+	GraduationCap,
+	Plus,
+	Trash2,
+	Wrench,
+} from "lucide-react";
+import { useId, type ReactNode } from "react";
 import { createResumeItemId } from "../data/resumeData";
 import type {
 	Education,
@@ -11,13 +21,19 @@ import type {
 	SkillItem,
 } from "../types/resume";
 
+export type ResumeEditorPanel = "structure" | "details";
+
 interface InputGroupProps {
 	label: string;
 	value: string;
 	onChange: (value: string) => void;
 	type?: "text" | "textarea";
 	placeholder?: string;
+	rows?: number;
 }
+
+const inputClass =
+	"w-full rounded-md border border-slate-200 bg-white p-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500";
 
 const InputGroup = ({
 	label,
@@ -25,32 +41,33 @@ const InputGroup = ({
 	onChange,
 	type = "text",
 	placeholder = "",
+	rows = 4,
 }: InputGroupProps) => {
 	const id = useId();
 	return (
 		<div className="mb-3">
 			<label
 				htmlFor={id}
-				className="block text-xs font-medium text-slate-500 mb-1"
+				className="mb-1 block text-xs font-medium text-slate-500"
 			>
 				{label}
 			</label>
 			{type === "textarea" ? (
 				<textarea
 					id={id}
-					className="w-full resize-y rounded-md border border-slate-200 bg-white p-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
-					rows={4}
+					className={`${inputClass} resize-y`}
+					rows={rows}
 					value={value}
-					onChange={(e) => onChange(e.target.value)}
+					onChange={(event) => onChange(event.target.value)}
 					placeholder={placeholder}
 				/>
 			) : (
 				<input
 					id={id}
 					type="text"
-					className="w-full rounded-md border border-slate-200 bg-white p-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
+					className={inputClass}
 					value={value}
-					onChange={(e) => onChange(e.target.value)}
+					onChange={(event) => onChange(event.target.value)}
 					placeholder={placeholder}
 				/>
 			)}
@@ -61,6 +78,9 @@ const InputGroup = ({
 interface ResumeEditorProps {
 	data: ResumeData;
 	sectionIcons: SectionIconVisibility;
+	panel: ResumeEditorPanel;
+	activeSection: SectionKey;
+	onActiveSectionChange: (section: SectionKey) => void;
 	onChange: (data: ResumeData) => void;
 	onSectionIconsChange: (sectionIcons: SectionIconVisibility) => void;
 }
@@ -72,19 +92,38 @@ interface ItemActionsProps {
 	onRemove: () => void;
 }
 
+const sectionFallbackNames: Record<SectionKey, string> = {
+	skills: "专业技能",
+	experience: "工作经历",
+	projects: "项目经历",
+	education: "教育背景",
+	other: "其他",
+};
+
+const sectionIconNodes: Record<SectionKey, ReactNode> = {
+	skills: <Wrench size={15} />,
+	experience: <BriefcaseBusiness size={15} />,
+	projects: <FolderGit2 size={15} />,
+	education: <GraduationCap size={15} />,
+	other: <FileText size={15} />,
+};
+
+const panelBlockClass = "border-b border-slate-200 p-4 last:border-b-0";
+
 const ItemActions = ({
 	index,
 	total,
 	onMove,
 	onRemove,
 }: ItemActionsProps) => (
-	<div className="absolute top-2 right-2 flex gap-0.5">
+	<div className="flex gap-0.5">
 		<button
 			type="button"
 			onClick={() => onMove("up")}
 			disabled={index === 0}
-			className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-30"
+			className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
 			title="上移"
+			aria-label="上移"
 		>
 			<ArrowUp size={14} />
 		</button>
@@ -92,8 +131,9 @@ const ItemActions = ({
 			type="button"
 			onClick={() => onMove("down")}
 			disabled={index === total - 1}
-			className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-30"
+			className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
 			title="下移"
+			aria-label="下移"
 		>
 			<ArrowDown size={14} />
 		</button>
@@ -102,61 +142,95 @@ const ItemActions = ({
 			onClick={onRemove}
 			className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
 			title="删除"
+			aria-label="删除"
 		>
 			<Trash2 size={14} />
 		</button>
 	</div>
 );
 
-interface EditorSectionProps {
-	title: string;
-	description?: string;
-	action?: ReactNode;
-	children: ReactNode;
-}
-
-const EditorSection = ({
+const ItemEditor = ({
 	title,
-	description,
+	index,
+	total,
+	onMove,
+	onRemove,
+	children,
+}: ItemActionsProps & {
+	title: string;
+	children: ReactNode;
+}) => (
+	<div className="group border-t border-slate-100 px-1 py-3 first:border-t-0">
+		<div className="mb-2 flex items-center justify-between gap-2">
+			<span className="min-w-0 truncate text-xs font-medium text-slate-400">
+				{title}
+			</span>
+			<ItemActions
+				index={index}
+				total={total}
+				onMove={onMove}
+				onRemove={onRemove}
+			/>
+		</div>
+		{children}
+	</div>
+);
+
+const PanelBlock = ({
+	title,
 	action,
 	children,
-}: EditorSectionProps) => {
-	const [open, setOpen] = useState(true);
+}: {
+	title: string;
+	action?: ReactNode;
+	children: ReactNode;
+}) => (
+	<section className={panelBlockClass}>
+		<div className="mb-3 flex items-center justify-between gap-2">
+			<h2 className="text-sm font-bold text-slate-800">{title}</h2>
+			{action}
+		</div>
+		{children}
+	</section>
+);
 
-	return (
-		<section className="border-b border-slate-200 pb-5 last:border-b-0">
-			<div className="mb-3 flex items-start gap-2">
-				<button
-					type="button"
-					onClick={() => setOpen((value) => !value)}
-					className="flex min-w-0 flex-1 items-start gap-2 rounded-md text-left transition-colors hover:text-blue-600"
-					aria-expanded={open}
-				>
-					<ChevronDown
-						size={16}
-						className={`mt-0.5 shrink-0 text-slate-400 transition-transform ${
-							open ? "" : "-rotate-90"
-						}`}
-					/>
-					<span className="min-w-0">
-						<span className="block font-bold text-slate-800">{title}</span>
-						{description && (
-							<span className="mt-1 block text-xs leading-relaxed text-slate-400">
-								{description}
-							</span>
-						)}
-					</span>
-				</button>
-				{action}
-			</div>
-			{open && <div>{children}</div>}
-		</section>
-	);
-};
+const EmptyState = ({
+	text,
+	action,
+}: {
+	text: string;
+	action?: ReactNode;
+}) => (
+	<div className="rounded-md border border-dashed border-slate-200 bg-slate-50/70 px-3 py-6 text-center">
+		<p className="text-xs text-slate-400">{text}</p>
+		{action && <div className="mt-3 flex justify-center">{action}</div>}
+	</div>
+);
+
+const AddButton = ({
+	title,
+	onClick,
+}: {
+	title: string;
+	onClick: () => void;
+}) => (
+	<button
+		type="button"
+		onClick={onClick}
+		className="flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors hover:bg-blue-50"
+		title={title}
+		aria-label={title}
+	>
+		<Plus size={16} />
+	</button>
+);
 
 const ResumeEditor = ({
 	data,
 	sectionIcons,
+	panel,
+	activeSection,
+	onActiveSectionChange,
 	onChange,
 	onSectionIconsChange,
 }: ResumeEditorProps) => {
@@ -174,16 +248,24 @@ const ResumeEditor = ({
 		});
 	};
 
-	const updateSectionIcon = (key: SectionKey, visible: boolean) => {
-		onSectionIconsChange({ ...sectionIcons, [key]: visible });
+	const updateAllSectionIcons = (visible: boolean) => {
+		onSectionIconsChange(
+			data.sectionOrder.reduce(
+				(result, key) => ({ ...result, [key]: visible }),
+				{ ...sectionIcons },
+			),
+		);
 	};
 
-	// --- Skills (dynamic array) ---
+	const allSectionIconsVisible = data.sectionOrder.every(
+		(key) => sectionIcons[key],
+	);
+
 	const updateSkill = (id: number, key: keyof SkillItem, value: string) => {
 		onChange({
 			...data,
-			skills: data.skills.map((s) =>
-				s.id === id ? { ...s, [key]: value } : s,
+			skills: data.skills.map((skill) =>
+				skill.id === id ? { ...skill, [key]: value } : skill,
 			),
 		});
 	};
@@ -199,15 +281,14 @@ const ResumeEditor = ({
 	};
 
 	const removeSkill = (id: number) => {
-		onChange({ ...data, skills: data.skills.filter((s) => s.id !== id) });
+		onChange({ ...data, skills: data.skills.filter((skill) => skill.id !== id) });
 	};
 
-	// --- Education (dynamic array) ---
 	const updateEducation = (id: number, key: keyof Education, value: string) => {
 		onChange({
 			...data,
-			education: data.education.map((e) =>
-				e.id === id ? { ...e, [key]: value } : e,
+			education: data.education.map((education) =>
+				education.id === id ? { ...education, [key]: value } : education,
 			),
 		});
 	};
@@ -230,21 +311,22 @@ const ResumeEditor = ({
 	const removeEducation = (id: number) => {
 		onChange({
 			...data,
-			education: data.education.filter((e) => e.id !== id),
+			education: data.education.filter((education) => education.id !== id),
 		});
 	};
 
-	// --- Experience & Projects (array operations) ---
 	const updateArrayItem = <T extends Experience | Project>(
 		section: "experience" | "projects",
 		id: number,
 		key: keyof T,
 		value: string,
 	) => {
-		const newSection = data[section].map((item) =>
-			item.id === id ? { ...item, [key]: value } : item,
-		);
-		onChange({ ...data, [section]: newSection });
+		onChange({
+			...data,
+			[section]: data[section].map((item) =>
+				item.id === id ? { ...item, [key]: value } : item,
+			),
+		});
 	};
 
 	const addItem = <T extends Experience | Project>(
@@ -264,17 +346,16 @@ const ResumeEditor = ({
 		});
 	};
 
-	// --- Generic move up/down ---
 	const moveItem = <T extends { id: number }>(
 		arr: T[],
 		index: number,
 		direction: "up" | "down",
 	): T[] => {
-		const newArr = [...arr];
+		const next = [...arr];
 		const targetIndex = direction === "up" ? index - 1 : index + 1;
-		if (targetIndex < 0 || targetIndex >= newArr.length) return newArr;
-		[newArr[index], newArr[targetIndex]] = [newArr[targetIndex], newArr[index]];
-		return newArr;
+		if (targetIndex < 0 || targetIndex >= next.length) return next;
+		[next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+		return next;
 	};
 
 	const moveSkillItem = (index: number, direction: "up" | "down") => {
@@ -299,466 +380,537 @@ const ResumeEditor = ({
 		});
 	};
 
-	// --- Section ordering ---
 	const moveSectionOrder = (index: number, direction: "up" | "down") => {
-		const newOrder = [...data.sectionOrder];
+		const nextOrder = [...data.sectionOrder];
 		const targetIndex = direction === "up" ? index - 1 : index + 1;
-		if (targetIndex < 0 || targetIndex >= newOrder.length) return;
-		[newOrder[index], newOrder[targetIndex]] = [
-			newOrder[targetIndex],
-			newOrder[index],
+		if (targetIndex < 0 || targetIndex >= nextOrder.length) return;
+		[nextOrder[index], nextOrder[targetIndex]] = [
+			nextOrder[targetIndex],
+			nextOrder[index],
 		];
-		onChange({ ...data, sectionOrder: newOrder });
+		onChange({ ...data, sectionOrder: nextOrder });
 	};
 
-	// 区块的默认备用名（防止 sectionTitles 被清空时显示空白）
-	const sectionFallbackNames: Record<SectionKey, string> = {
-		skills: "技术栈",
-		experience: "工作经历",
-		projects: "项目经历",
-		education: "教育背景",
-		other: "其他",
+	const getSectionTitle = (key: SectionKey) =>
+		data.sectionTitles[key] || sectionFallbackNames[key];
+
+	const getSectionSummary = (key: SectionKey) => {
+		switch (key) {
+			case "skills":
+				return `${data.skills.length} 个分类`;
+			case "experience":
+				return `${data.experience.length} 段经历`;
+			case "projects":
+				return `${data.projects.length} 个项目`;
+			case "education":
+				return `${data.education.length} 段教育`;
+			case "other":
+				return data.other.trim() ? "已填写" : "空";
+		}
 	};
 
-	return (
-		<div className="space-y-5 p-4 pb-20 sm:p-5 lg:p-6">
-			{/* 个人信息 */}
-			<EditorSection title="个人信息">
-				<div className="grid grid-cols-1 gap-2">
-					<InputGroup
-						label="姓名"
-						value={data.personal.name}
-						onChange={(v) => updatePersonal("name", v)}
-					/>
-					<InputGroup
-						label="职位头衔"
-						value={data.personal.title}
-						onChange={(v) => updatePersonal("title", v)}
-					/>
-					<div className="grid grid-cols-2 gap-2">
-						<InputGroup
-							label="电话"
-							value={data.personal.phone}
-							onChange={(v) => updatePersonal("phone", v)}
-						/>
-						<InputGroup
-							label="邮箱"
-							value={data.personal.email}
-							onChange={(v) => updatePersonal("email", v)}
-						/>
-					</div>
-					<InputGroup
-						label="所在地"
-						value={data.personal.location}
-						onChange={(v) => updatePersonal("location", v)}
-						placeholder="例：北京, 中国"
-					/>
-					<InputGroup
-						label="到岗情况"
-						value={data.personal.availability}
-						onChange={(v) => updatePersonal("availability", v)}
-						placeholder="例：4天/周 3个月+"
-					/>
-					<InputGroup
-						label="Github (不带 https://)"
-						value={data.personal.github}
-						onChange={(v) => updatePersonal("github", v)}
-						placeholder="例：github.com/yourname"
-					/>
-					<InputGroup
-						label="个人网站 (不带 https://)"
-						value={data.personal.website}
-						onChange={(v) => updatePersonal("website", v)}
-						placeholder="例：your-portfolio.com"
-					/>
-				</div>
-			</EditorSection>
-
-			{/* 区块顺序 */}
-			<EditorSection
-				title="区块顺序"
-				description="点击箭头调整各区块在简历中的上下顺序"
-			>
-				<div className="space-y-1.5">
-					{data.sectionOrder.map((key, index) => (
-						<div
-							key={key}
-							className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded px-3 py-2"
-						>
-							<span className="flex-1 text-sm text-slate-700 font-medium">
-								{data.sectionTitles[key] || sectionFallbackNames[key]}
-							</span>
-							<button
-								type="button"
-								onClick={() => moveSectionOrder(index, "up")}
-								disabled={index === 0}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
-								title="上移"
-							>
-								<ArrowUp size={14} />
-							</button>
-							<button
-								type="button"
-								onClick={() => moveSectionOrder(index, "down")}
-								disabled={index === data.sectionOrder.length - 1}
-								className="text-slate-400 hover:text-blue-500 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
-								title="下移"
-							>
-								<ArrowDown size={14} />
-							</button>
-						</div>
-					))}
-				</div>
-			</EditorSection>
-
-			{/* 区块标题自定义 */}
-			<EditorSection
-				title="区块标题"
-				description="自定义各区块标题，并控制是否显示线性小图标"
-			>
+	const renderPersonalPanel = () => (
+		<PanelBlock title="个人信息">
+			<div className="grid grid-cols-1 gap-2">
+				<InputGroup
+					label="姓名"
+					value={data.personal.name}
+					onChange={(value) => updatePersonal("name", value)}
+				/>
+				<InputGroup
+					label="职位头衔"
+					value={data.personal.title}
+					onChange={(value) => updatePersonal("title", value)}
+				/>
 				<div className="grid grid-cols-2 gap-2">
 					<InputGroup
-						label="技术栈标题"
-						value={data.sectionTitles.skills}
-						onChange={(v) => updateSectionTitle("skills", v)}
+						label="电话"
+						value={data.personal.phone}
+						onChange={(value) => updatePersonal("phone", value)}
 					/>
 					<InputGroup
-						label="工作经历标题"
-						value={data.sectionTitles.experience}
-						onChange={(v) => updateSectionTitle("experience", v)}
-					/>
-					<InputGroup
-						label="项目经历标题"
-						value={data.sectionTitles.projects}
-						onChange={(v) => updateSectionTitle("projects", v)}
-					/>
-					<InputGroup
-						label="教育背景标题"
-						value={data.sectionTitles.education}
-						onChange={(v) => updateSectionTitle("education", v)}
-					/>
-					<InputGroup
-						label="其他标题"
-						value={data.sectionTitles.other}
-						onChange={(v) => updateSectionTitle("other", v)}
+						label="邮箱"
+						value={data.personal.email}
+						onChange={(value) => updatePersonal("email", value)}
 					/>
 				</div>
-				<div className="mt-2 rounded border border-slate-200 bg-slate-50 px-3 py-2">
-					<p className="text-xs font-medium text-slate-500 mb-2">
-						区块标题图标
-					</p>
-					<div className="grid grid-cols-2 gap-2">
-						{data.sectionOrder.map((key) => (
-							<label
-								key={key}
-								className="flex items-center gap-2 text-xs text-slate-600"
-							>
-								<input
-									type="checkbox"
-									checked={sectionIcons[key]}
-									onChange={(e) => updateSectionIcon(key, e.target.checked)}
-									className="h-3.5 w-3.5 accent-blue-600"
-								/>
-								<span>{data.sectionTitles[key] || sectionFallbackNames[key]}</span>
-							</label>
-						))}
-					</div>
-				</div>
-			</EditorSection>
+				<InputGroup
+					label="所在地"
+					value={data.personal.location}
+					onChange={(value) => updatePersonal("location", value)}
+					placeholder="例：北京, 中国"
+				/>
+				<InputGroup
+					label="到岗情况"
+					value={data.personal.availability}
+					onChange={(value) => updatePersonal("availability", value)}
+					placeholder="例：4天/周 3个月+"
+				/>
+				<InputGroup
+					label="GitHub"
+					value={data.personal.github}
+					onChange={(value) => updatePersonal("github", value)}
+					placeholder="github.com/yourname"
+				/>
+				<InputGroup
+					label="个人网站"
+					value={data.personal.website}
+					onChange={(value) => updatePersonal("website", value)}
+					placeholder="your-portfolio.com"
+				/>
+			</div>
+		</PanelBlock>
+	);
 
-			{/* 技术栈 (动态) */}
-			<EditorSection
-				title={data.sectionTitles.skills || "技术栈"}
-				description="支持粗体和链接语法，内容会实时反映到预览"
+	const renderStructurePanel = () => (
+		<div>
+			<PanelBlock
+				title="区块顺序"
 				action={
-					<button
-						type="button"
-						onClick={addSkill}
-						className="flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors hover:bg-blue-50"
-						title="添加技能分类"
-					>
-						<Plus size={16} />
-					</button>
+					<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-400">
+						{data.sectionOrder.length}
+					</span>
 				}
 			>
-				<p className="text-xs text-slate-400 mb-3 leading-relaxed">
-					内容支持行内语法：
-					<code className="bg-slate-100 px-1 rounded text-slate-600">
-						**粗体**
-					</code>
-					{" · "}
-					<code className="bg-slate-100 px-1 rounded text-slate-600">
-						[链接文字](https://url)
-					</code>
-				</p>
+				<div className="space-y-1.5">
+					{data.sectionOrder.map((key, index) => {
+						const active = key === activeSection;
+						return (
+							<div key={key} className="group flex items-center gap-1.5">
+								<button
+									type="button"
+									onClick={() => onActiveSectionChange(key)}
+									className={`flex min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 py-2 text-left transition ${
+										active
+											? "border-blue-200 bg-blue-50 text-blue-700"
+											: "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
+									}`}
+									aria-pressed={active}
+								>
+									<span
+										className={`flex h-7 w-7 shrink-0 items-center justify-center rounded ${
+											active ? "bg-white text-blue-600" : "bg-white text-slate-400"
+										}`}
+									>
+										{sectionIconNodes[key]}
+									</span>
+									<span className="min-w-0 flex-1">
+										<span className="block truncate text-sm font-semibold">
+											{getSectionTitle(key)}
+										</span>
+										<span className="block text-xs text-slate-400">
+											{getSectionSummary(key)}
+										</span>
+									</span>
+								</button>
+								<div className="flex shrink-0 gap-0.5 opacity-60 transition group-hover:opacity-100">
+									<button
+										type="button"
+										onClick={() => moveSectionOrder(index, "up")}
+										disabled={index === 0}
+										className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
+										title="上移"
+										aria-label="上移"
+									>
+										<ArrowUp size={14} />
+									</button>
+									<button
+										type="button"
+										onClick={() => moveSectionOrder(index, "down")}
+										disabled={index === data.sectionOrder.length - 1}
+										className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
+										title="下移"
+										aria-label="下移"
+									>
+										<ArrowDown size={14} />
+									</button>
+								</div>
+							</div>
+						);
+					})}
+				</div>
+				<label className="mt-3 flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+					<span className="flex items-center gap-2">
+						<span className="text-slate-400">
+							{sectionIconNodes[activeSection]}
+						</span>
+						<span>标题图标</span>
+					</span>
+					<input
+						type="checkbox"
+						checked={allSectionIconsVisible}
+						onChange={(event) => updateAllSectionIcons(event.target.checked)}
+						className="h-4 w-4 accent-blue-600"
+					/>
+				</label>
+			</PanelBlock>
+			{renderPersonalPanel()}
+		</div>
+	);
+
+	const renderSectionSettings = () => (
+		<PanelBlock title="区块设置">
+			<InputGroup
+				label="标题"
+				value={data.sectionTitles[activeSection]}
+				onChange={(value) => updateSectionTitle(activeSection, value)}
+			/>
+		</PanelBlock>
+	);
+
+	const renderSkillsEditor = () => (
+		<PanelBlock
+			title={getSectionTitle("skills")}
+			action={<AddButton title="添加技能分类" onClick={addSkill} />}
+		>
+			<div className="space-y-3">
 				{data.skills.map((skill, index) => (
-					<div
+					<ItemEditor
 						key={skill.id}
-						className="relative mb-3 rounded-md border border-slate-200 bg-slate-50 p-4"
+						title={skill.label || `分类 ${index + 1}`}
+						index={index}
+						total={data.skills.length}
+						onMove={(direction) => moveSkillItem(index, direction)}
+						onRemove={() => removeSkill(skill.id)}
 					>
-						<ItemActions
-							index={index}
-							total={data.skills.length}
-							onMove={(direction) => moveSkillItem(index, direction)}
-							onRemove={() => removeSkill(skill.id)}
-						/>
 						<InputGroup
 							label="分类名称"
 							value={skill.label}
-							onChange={(v) => updateSkill(skill.id, "label", v)}
+							onChange={(value) => updateSkill(skill.id, "label", value)}
 							placeholder="例：核心能力"
 						/>
 						<InputGroup
-							label="内容（支持 **粗体** 语法）"
+							label="内容"
 							value={skill.content}
-							onChange={(v) => updateSkill(skill.id, "content", v)}
+							onChange={(value) => updateSkill(skill.id, "content", value)}
 							placeholder="例：**JavaScript**, TypeScript, React"
 						/>
-					</div>
+					</ItemEditor>
 				))}
 				{data.skills.length === 0 && (
-					<p className="text-xs text-slate-400 text-center py-4">
-						暂无技能分类，点击 + 添加
-					</p>
+					<EmptyState
+						text="暂无技能分类"
+						action={<AddButton title="添加技能分类" onClick={addSkill} />}
+					/>
 				)}
-			</EditorSection>
+			</div>
+		</PanelBlock>
+	);
 
-			{/* 工作经历 */}
-			<EditorSection
-				title={data.sectionTitles.experience || "工作经历"}
-				action={
-					<button
-						type="button"
-						onClick={() =>
-							addItem<Experience>("experience", {
-								company: "新公司",
-								role: "职位",
-								date: "时间",
-								details: "",
-							})
-						}
-						className="flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors hover:bg-blue-50"
-						title="添加工作经历"
+	const renderExperienceEditor = () => (
+		<PanelBlock
+			title={getSectionTitle("experience")}
+			action={
+				<AddButton
+					title="添加工作经历"
+					onClick={() =>
+						addItem<Experience>("experience", {
+							company: "新公司",
+							role: "职位",
+							date: "时间",
+							details: "",
+						})
+					}
+				/>
+			}
+		>
+			<div className="space-y-3">
+				{data.experience.map((experience, index) => (
+					<ItemEditor
+						key={experience.id}
+						title={experience.company || `经历 ${index + 1}`}
+						index={index}
+						total={data.experience.length}
+						onMove={(direction) => moveExperienceItem(index, direction)}
+						onRemove={() => removeItem("experience", experience.id)}
 					>
-						<Plus size={16} />
-					</button>
-				}
-			>
-				{data.experience.map((exp, index) => (
-					<div
-						key={exp.id}
-						className="relative mb-4 rounded-md border border-slate-200 bg-slate-50 p-4"
-					>
-						<ItemActions
-							index={index}
-							total={data.experience.length}
-							onMove={(direction) => moveExperienceItem(index, direction)}
-							onRemove={() => removeItem("experience", exp.id)}
-						/>
 						<InputGroup
 							label="公司"
-							value={exp.company}
-							onChange={(v) =>
-								updateArrayItem<Experience>("experience", exp.id, "company", v)
+							value={experience.company}
+							onChange={(value) =>
+								updateArrayItem<Experience>(
+									"experience",
+									experience.id,
+									"company",
+									value,
+								)
 							}
 						/>
 						<div className="grid grid-cols-2 gap-2">
 							<InputGroup
 								label="职位"
-								value={exp.role}
-								onChange={(v) =>
-									updateArrayItem<Experience>("experience", exp.id, "role", v)
+								value={experience.role}
+								onChange={(value) =>
+									updateArrayItem<Experience>(
+										"experience",
+										experience.id,
+										"role",
+										value,
+									)
 								}
 							/>
 							<InputGroup
 								label="时间"
-								value={exp.date}
-								onChange={(v) =>
-									updateArrayItem<Experience>("experience", exp.id, "date", v)
+								value={experience.date}
+								onChange={(value) =>
+									updateArrayItem<Experience>(
+										"experience",
+										experience.id,
+										"date",
+										value,
+									)
 								}
 							/>
 						</div>
 						<InputGroup
 							type="textarea"
-							label="详情 (每行一点)"
-							value={exp.details}
-							onChange={(v) =>
-								updateArrayItem<Experience>("experience", exp.id, "details", v)
+							label="详情"
+							value={experience.details}
+							onChange={(value) =>
+								updateArrayItem<Experience>(
+									"experience",
+									experience.id,
+									"details",
+									value,
+								)
 							}
-							placeholder="使用 React 优化了..."
+							placeholder="每行一条经历亮点"
 						/>
-					</div>
+					</ItemEditor>
 				))}
 				{data.experience.length === 0 && (
-					<p className="text-xs text-slate-400 text-center py-4">
-						暂无工作经历，点击 + 添加
-					</p>
-				)}
-			</EditorSection>
-
-			{/* 项目 */}
-			<EditorSection
-				title={data.sectionTitles.projects || "项目经历"}
-				action={
-					<button
-						type="button"
-						onClick={() =>
-							addItem<Project>("projects", {
-								name: "新项目",
-								tags: "",
-								link: "",
-								source: "",
-								description: "",
-							})
+					<EmptyState
+						text="暂无工作经历"
+						action={
+							<AddButton
+								title="添加工作经历"
+								onClick={() =>
+									addItem<Experience>("experience", {
+										company: "新公司",
+										role: "职位",
+										date: "时间",
+										details: "",
+									})
+								}
+							/>
 						}
-						className="flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors hover:bg-blue-50"
-						title="添加项目"
+					/>
+				)}
+			</div>
+		</PanelBlock>
+	);
+
+	const renderProjectsEditor = () => (
+		<PanelBlock
+			title={getSectionTitle("projects")}
+			action={
+				<AddButton
+					title="添加项目"
+					onClick={() =>
+						addItem<Project>("projects", {
+							name: "新项目",
+							tags: "",
+							link: "",
+							source: "",
+							description: "",
+						})
+					}
+				/>
+			}
+		>
+			<div className="space-y-3">
+				{data.projects.map((project, index) => (
+					<ItemEditor
+						key={project.id}
+						title={project.name || `项目 ${index + 1}`}
+						index={index}
+						total={data.projects.length}
+						onMove={(direction) => moveProjectItem(index, direction)}
+						onRemove={() => removeItem("projects", project.id)}
 					>
-						<Plus size={16} />
-					</button>
-				}
-			>
-				{data.projects.map((proj, index) => (
-					<div
-						key={proj.id}
-						className="relative mb-4 rounded-md border border-slate-200 bg-slate-50 p-4"
-					>
-						<ItemActions
-							index={index}
-							total={data.projects.length}
-							onMove={(direction) => moveProjectItem(index, direction)}
-							onRemove={() => removeItem("projects", proj.id)}
-						/>
 						<InputGroup
 							label="项目名"
-							value={proj.name}
-							onChange={(v) =>
-								updateArrayItem<Project>("projects", proj.id, "name", v)
+							value={project.name}
+							onChange={(value) =>
+								updateArrayItem<Project>("projects", project.id, "name", value)
 							}
 						/>
 						<InputGroup
 							label="技术标签"
-							value={proj.tags}
-							onChange={(v) =>
-								updateArrayItem<Project>("projects", proj.id, "tags", v)
+							value={project.tags}
+							onChange={(value) =>
+								updateArrayItem<Project>("projects", project.id, "tags", value)
 							}
 						/>
 						<div className="grid grid-cols-2 gap-2">
 							<InputGroup
-								label="Demo 链接"
-								value={proj.link}
-								onChange={(v) =>
-									updateArrayItem<Project>("projects", proj.id, "link", v)
+								label="Demo"
+								value={project.link}
+								onChange={(value) =>
+									updateArrayItem<Project>(
+										"projects",
+										project.id,
+										"link",
+										value,
+									)
 								}
 								placeholder="不带 https://"
 							/>
 							<InputGroup
-								label="源码链接"
-								value={proj.source}
-								onChange={(v) =>
-									updateArrayItem<Project>("projects", proj.id, "source", v)
+								label="源码"
+								value={project.source}
+								onChange={(value) =>
+									updateArrayItem<Project>(
+										"projects",
+										project.id,
+										"source",
+										value,
+									)
 								}
 								placeholder="不带 https://"
 							/>
 						</div>
 						<InputGroup
 							type="textarea"
-							label="描述 (每行一点)"
-							value={proj.description}
-							onChange={(v) =>
-								updateArrayItem<Project>("projects", proj.id, "description", v)
+							label="描述"
+							value={project.description}
+							onChange={(value) =>
+								updateArrayItem<Project>(
+									"projects",
+									project.id,
+									"description",
+									value,
+								)
 							}
+							placeholder="每行一条项目亮点"
 						/>
-					</div>
+					</ItemEditor>
 				))}
 				{data.projects.length === 0 && (
-					<p className="text-xs text-slate-400 text-center py-4">
-						暂无项目经历，点击 + 添加
-					</p>
+					<EmptyState
+						text="暂无项目经历"
+						action={
+							<AddButton
+								title="添加项目"
+								onClick={() =>
+									addItem<Project>("projects", {
+										name: "新项目",
+										tags: "",
+										link: "",
+										source: "",
+										description: "",
+									})
+								}
+							/>
+						}
+					/>
 				)}
-			</EditorSection>
+			</div>
+		</PanelBlock>
+	);
 
-			{/* 教育 */}
-			<EditorSection
-				title={data.sectionTitles.education || "教育背景"}
-				action={
-					<button
-						type="button"
-						onClick={addEducation}
-						className="flex h-8 w-8 items-center justify-center rounded-md text-blue-600 transition-colors hover:bg-blue-50"
-						title="添加教育经历"
+	const renderEducationEditor = () => (
+		<PanelBlock
+			title={getSectionTitle("education")}
+			action={<AddButton title="添加教育经历" onClick={addEducation} />}
+		>
+			<div className="space-y-3">
+				{data.education.map((education, index) => (
+					<ItemEditor
+						key={education.id}
+						title={education.school || `教育 ${index + 1}`}
+						index={index}
+						total={data.education.length}
+						onMove={(direction) => moveEducationItem(index, direction)}
+						onRemove={() => removeEducation(education.id)}
 					>
-						<Plus size={16} />
-					</button>
-				}
-			>
-				{data.education.map((edu, index) => (
-					<div
-						key={edu.id}
-						className="relative mb-4 rounded-md border border-slate-200 bg-slate-50 p-4"
-					>
-						<ItemActions
-							index={index}
-							total={data.education.length}
-							onMove={(direction) => moveEducationItem(index, direction)}
-							onRemove={() => removeEducation(edu.id)}
-						/>
 						<InputGroup
 							label="学校"
-							value={edu.school}
-							onChange={(v) => updateEducation(edu.id, "school", v)}
+							value={education.school}
+							onChange={(value) =>
+								updateEducation(education.id, "school", value)
+							}
 						/>
 						<InputGroup
 							label="学位"
-							value={edu.degree}
-							onChange={(v) => updateEducation(edu.id, "degree", v)}
+							value={education.degree}
+							onChange={(value) =>
+								updateEducation(education.id, "degree", value)
+							}
 						/>
 						<InputGroup
 							label="时间"
-							value={edu.date}
-							onChange={(v) => updateEducation(edu.id, "date", v)}
+							value={education.date}
+							onChange={(value) => updateEducation(education.id, "date", value)}
 						/>
-					</div>
+					</ItemEditor>
 				))}
 				{data.education.length === 0 && (
-					<p className="text-xs text-slate-400 text-center py-4">
-						暂无教育经历，点击 + 添加
-					</p>
+					<EmptyState
+						text="暂无教育经历"
+						action={<AddButton title="添加教育经历" onClick={addEducation} />}
+					/>
 				)}
-			</EditorSection>
+			</div>
+		</PanelBlock>
+	);
 
-			{/* 其他 */}
-			<EditorSection title={data.sectionTitles.other || "其他"}>
-				<p className="text-xs text-slate-400 mb-2 leading-relaxed">
-					每行一条，支持行内语法：
-					<br />
-					<code className="bg-slate-100 px-1 rounded text-slate-600">
-						**粗体**
-					</code>
-					{" · "}
-					<code className="bg-slate-100 px-1 rounded text-slate-600">
-						[链接文字](https://url)
-					</code>
-					<br />
-					行首{" "}
-					<code className="bg-slate-100 px-1 rounded text-slate-600">- </code>{" "}
-					可选（写不写都会显示为列表）
+	const renderOtherEditor = () => (
+		<PanelBlock title={getSectionTitle("other")}>
+			<textarea
+				className={`${inputClass} min-h-40 resize-y font-mono`}
+				value={data.other}
+				onChange={(event) => onChange({ ...data, other: event.target.value })}
+				placeholder={
+					"**开源项目**：维护 [my-project](https://github.com/yourname/project)\n**工具链**：Vercel、Cloudflare Pages"
+				}
+			/>
+			{data.other.trim() === "" && (
+				<p className="mt-2 text-xs text-slate-400">
+					清空内容后「其他」区块将不在简历中显示
 				</p>
-				<textarea
-					className="w-full resize-y rounded-md border border-slate-200 bg-white p-2 font-mono text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
-					rows={6}
-					value={data.other}
-					onChange={(e) => onChange({ ...data, other: e.target.value })}
-					placeholder={
-						"**开源项目**：维护 [my-project](https://github.com/yourname/project)，简介\n**工具链**：日常使用 Vercel、Cloudflare Pages 进行项目部署"
-					}
-				/>
-				{data.other.trim() === "" && (
-					<p className="text-xs text-slate-400 mt-1">
-						清空内容后「其他」区块将不在简历中显示
-					</p>
-				)}
-			</EditorSection>
+			)}
+		</PanelBlock>
+	);
+
+	const renderActiveSectionEditor = () => {
+		switch (activeSection) {
+			case "skills":
+				return renderSkillsEditor();
+			case "experience":
+				return renderExperienceEditor();
+			case "projects":
+				return renderProjectsEditor();
+			case "education":
+				return renderEducationEditor();
+			case "other":
+				return renderOtherEditor();
+		}
+	};
+
+	if (panel === "structure") return renderStructurePanel();
+
+	return (
+		<div className="flex h-full min-h-0 flex-col">
+			<div className="shrink-0 border-b border-slate-200 px-4 py-3">
+				<div className="flex items-center gap-2">
+					<span className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+						{sectionIconNodes[activeSection]}
+					</span>
+					<div className="min-w-0 flex-1">
+						<h2 className="truncate text-sm font-bold text-slate-800">
+							{getSectionTitle(activeSection)}
+						</h2>
+						<p className="text-xs text-slate-400">
+							{getSectionSummary(activeSection)}
+						</p>
+					</div>
+				</div>
+			</div>
+			<div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+				{renderSectionSettings()}
+				{renderActiveSectionEditor()}
+			</div>
 		</div>
 	);
 };

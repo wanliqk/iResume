@@ -499,8 +499,10 @@ export const normalizeThemeIdList = (value: unknown): ThemeId[] => {
 
 export const getDefaultSectionIconVisibility = (
 	themeId: ThemeId,
-): SectionIconVisibility =>
-	createSectionIconVisibility(Boolean(themes[themeId].showSectionIcons));
+): SectionIconVisibility => {
+	void themeId;
+	return createSectionIconVisibility(true);
+};
 
 // 默认主题
 export const DEFAULT_THEME_ID: ThemeId = "classic";

@@ -144,7 +144,7 @@ export function createResumeDocument(
 		themeId: DEFAULT_THEME_ID,
 		fontSizePt: DEFAULT_RESUME_FONT_SIZE_PT,
 		pageMarginMm: DEFAULT_RESUME_PAGE_MARGIN_MM,
-		sectionIcons: createSectionIconVisibility(false),
+		sectionIcons: createSectionIconVisibility(true),
 	});
 	const personalName = data.personal.name.trim();
 

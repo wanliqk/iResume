@@ -20,30 +20,30 @@ const PageMarginControl = ({ value, onChange }: PageMarginControlProps) => {
 
 	return (
 		<div
-			className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-1"
+			className="flex h-8 items-center gap-0.5 rounded-lg bg-white/60 px-1 text-xs ring-1 ring-slate-200/60"
 			title="调整 PDF 页边距"
 		>
-			<Frame size={15} className="text-slate-400" aria-hidden="true" />
+			<Frame size={14} className="ml-1 text-slate-400" aria-hidden="true" />
 			<button
 				type="button"
 				onClick={() =>
 					onChange(getAdjacentResumePageMargin(value, "smaller"))
 				}
 				disabled={value === MIN_PAGE_MARGIN}
-				className="flex h-7 w-7 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
+				className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100/80 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-25"
 				title="减小页边距"
 				aria-label="减小 PDF 页边距"
 			>
 				<Minus size={14} />
 			</button>
-			<span className="min-w-12 text-center text-xs font-medium tabular-nums text-slate-600">
+			<span className="min-w-11 text-center font-medium tabular-nums text-slate-600">
 				{value}mm
 			</span>
 			<button
 				type="button"
 				onClick={() => onChange(getAdjacentResumePageMargin(value, "larger"))}
 				disabled={value === MAX_PAGE_MARGIN}
-				className="flex h-7 w-7 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
+				className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition-colors hover:bg-slate-100/80 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-25"
 				title="增大页边距"
 				aria-label="增大 PDF 页边距"
 			>
@@ -53,7 +53,7 @@ const PageMarginControl = ({ value, onChange }: PageMarginControlProps) => {
 				type="button"
 				onClick={() => onChange(DEFAULT_RESUME_PAGE_MARGIN_MM)}
 				disabled={isDefault}
-				className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
+				className="flex h-6 w-6 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100/80 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-25"
 				title="恢复默认页边距"
 				aria-label="恢复默认 PDF 页边距"
 			>

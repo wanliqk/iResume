@@ -1,14 +1,15 @@
 import {
-	ArrowRight,
 	Clock3,
 	Copy,
+	FilePlus2,
 	FileText,
 	Github,
+	LayoutGrid,
 	Plus,
 	Tags,
 	Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { normalizeResumeTags, type ResumeDocument } from "../data/resumeLibrary";
 
 interface CreateResumeInput {
@@ -45,7 +46,16 @@ const formatUpdatedAt = (value: string) => {
 };
 
 const inputClass =
-	"w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500";
+	"w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500";
+
+const BrandMark = () => (
+	<div className="flex items-center gap-2 text-xl font-bold">
+		<span className="inline-flex items-center justify-center rounded bg-blue-600 px-2 py-1 text-sm font-black leading-none tracking-tight text-white">
+			i
+		</span>
+		<span className="leading-none">Resume</span>
+	</div>
+);
 
 const ResumeCard = ({
 	document,
@@ -54,76 +64,92 @@ const ResumeCard = ({
 	onDuplicate,
 	onDelete,
 }: ResumeCardProps) => (
-	<article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md">
-		<div className="flex min-w-0 items-start justify-between gap-3">
-			<button
-				type="button"
-				onClick={onOpen}
-				className="flex min-w-0 flex-1 items-start gap-3 text-left"
-			>
-				<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-					<FileText size={19} />
+	<article className="group flex min-h-[204px] flex-col rounded-lg border border-slate-200/70 bg-white/70 p-4 transition-colors hover:border-slate-300 hover:bg-white/85">
+		<button
+			type="button"
+			onClick={onOpen}
+			className="flex min-w-0 flex-1 flex-col text-left"
+		>
+			<div className="mb-4 flex items-start justify-between gap-3">
+				<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100/80 text-slate-400 transition-colors group-hover:text-slate-600">
+					<FileText size={17} />
 				</div>
-				<div className="min-w-0">
-					<h2 className="truncate text-base font-bold text-slate-900">
-						{document.name}
-					</h2>
-					<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
-						<span className="inline-flex items-center gap-1">
-							<Clock3 size={13} />
-							{formatUpdatedAt(document.updatedAt)}
-						</span>
-						<span className="font-mono">v{document.version}</span>
-					</div>
-				</div>
-			</button>
-			<button
-				type="button"
-				onClick={onOpen}
-				className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
-			>
-				编辑
-				<ArrowRight size={14} />
-			</button>
-		</div>
+				<span className="rounded-full border border-slate-200/70 px-2 py-0.5 font-mono text-[11px] text-slate-400">
+					v{document.version}
+				</span>
+			</div>
 
-		<div className="mt-4 min-h-6">
+			<h2 className="line-clamp-2 text-base font-bold leading-snug text-slate-900">
+				{document.name}
+			</h2>
+			<div className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
+				<Clock3 size={13} />
+				<span>{formatUpdatedAt(document.updatedAt)}</span>
+			</div>
+		</button>
+
+		<div className="mt-4 min-h-7">
 			{document.tags.length > 0 ? (
 				<div className="flex flex-wrap gap-1.5">
 					{document.tags.map((tag) => (
 						<span
 							key={tag}
-							className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-400"
+							className="rounded border border-slate-200/70 bg-slate-50/80 px-1.5 py-0.5 text-[11px] font-medium text-slate-400"
 						>
 							{tag}
 						</span>
 					))}
 				</div>
 			) : (
-				<span className="text-xs text-slate-300">暂无标签</span>
+				<span className="text-xs text-slate-300">未添加标签</span>
 			)}
 		</div>
 
-		<div className="mt-4 flex justify-end gap-1.5 border-t border-slate-100 pt-3">
+		<div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
 			<button
 				type="button"
-				onClick={onDuplicate}
-				className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+				onClick={onOpen}
+				className="rounded-md px-2 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
 			>
-				<Copy size={14} />
-				复制
+				打开编辑
 			</button>
-			<button
-				type="button"
-				onClick={onDelete}
-				disabled={!canDelete}
-				className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-slate-400 transition hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-35"
-			>
-				<Trash2 size={14} />
-				删除
-			</button>
+			<div className="flex gap-1">
+				<button
+					type="button"
+					onClick={onDuplicate}
+					className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-800"
+					title="复制"
+					aria-label={`复制 ${document.name}`}
+				>
+					<Copy size={14} />
+				</button>
+				<button
+					type="button"
+					onClick={onDelete}
+					disabled={!canDelete}
+					className="flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-35"
+					title="删除"
+					aria-label={`删除 ${document.name}`}
+				>
+					<Trash2 size={14} />
+				</button>
+			</div>
 		</div>
 	</article>
+);
+
+const CreateResumeCard = ({ onClick }: { onClick: () => void }) => (
+	<button
+		type="button"
+		onClick={onClick}
+		className="group flex min-h-[204px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white/35 p-5 text-slate-400 transition-colors hover:border-slate-400 hover:bg-white/60 hover:text-slate-600"
+	>
+		<span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-dashed border-current bg-white/40">
+			<Plus size={22} />
+		</span>
+		<span className="text-sm font-semibold">新建简历</span>
+		<span className="mt-1 text-xs text-slate-300">空白开始</span>
+	</button>
 );
 
 interface CreateResumeModalProps {
@@ -140,7 +166,8 @@ const CreateResumeModal = ({
 	const [name, setName] = useState(defaultName);
 	const [tagText, setTagText] = useState("");
 
-	const submit = () => {
+	const submit = (event?: FormEvent<HTMLFormElement>) => {
+		event?.preventDefault();
 		onCreate({
 			name: name.trim() || defaultName,
 			tags: normalizeResumeTags(tagText),
@@ -148,13 +175,19 @@ const CreateResumeModal = ({
 	};
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/25 px-4 backdrop-blur-sm">
-			<div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl">
-				<div className="mb-4">
-					<h2 className="text-lg font-bold text-slate-900">新建简历</h2>
-					<p className="mt-1 text-sm text-slate-400">
-						创建后会进入空白简历，可以再补充内容和外观。
-					</p>
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/15 px-4 backdrop-blur-[2px]">
+			<form
+				onSubmit={submit}
+				className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-lg shadow-slate-900/[0.08]"
+			>
+				<div className="mb-4 flex items-center gap-3">
+					<span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-500">
+						<FilePlus2 size={19} />
+					</span>
+					<div>
+						<h2 className="text-lg font-bold text-slate-900">新建简历</h2>
+						<p className="mt-0.5 text-sm text-slate-400">名称与标签</p>
+					</div>
 				</div>
 
 				<label className="mb-3 block">
@@ -182,7 +215,6 @@ const CreateResumeModal = ({
 							value={tagText}
 							onChange={(event) => setTagText(event.target.value)}
 							onKeyDown={(event) => {
-								if (event.key === "Enter") submit();
 								if (event.key === "Escape") onClose();
 							}}
 							className={`${inputClass} pl-8`}
@@ -200,14 +232,13 @@ const CreateResumeModal = ({
 						取消
 					</button>
 					<button
-						type="button"
-						onClick={submit}
-						className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+						type="submit"
+						className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
 					>
 						创建
 					</button>
 				</div>
-			</div>
+			</form>
 		</div>
 	);
 };
@@ -224,39 +255,45 @@ const ResumeManager = ({
 
 	return (
 		<div className="min-h-screen bg-slate-100 font-sans text-slate-900">
-			<nav className="border-b border-slate-200 bg-white px-4 py-3 shadow-sm sm:px-6">
-				<div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-					<div className="flex items-center gap-3">
-						<div className="flex items-center gap-2 font-bold text-xl">
-							<span className="inline-flex items-center justify-center rounded bg-blue-600 px-2 py-1 text-sm font-black leading-none tracking-tight text-white">
-								i
-							</span>
-							<span className="leading-none">Resume</span>
-						</div>
+			<header className="sticky top-0 z-30 border-b border-slate-200/70 bg-slate-100/90 backdrop-blur">
+				<div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+					<BrandMark />
+					<div className="flex items-center gap-2">
+						<span className="hidden items-center gap-1.5 rounded-full border border-slate-200/70 bg-white/55 px-3 py-1 text-xs font-medium text-slate-400 sm:inline-flex">
+							<LayoutGrid size={14} />
+							{documents.length} 份
+						</span>
 						<a
 							href="https://github.com/dogxii/iResume"
 							target="_blank"
 							rel="noreferrer"
 							aria-label="GitHub 仓库"
-							className="hidden items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-slate-700 sm:flex"
+							className="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/60 hover:text-slate-700"
 						>
 							<Github size={18} />
 						</a>
 					</div>
 				</div>
-			</nav>
+			</header>
 
-			<main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-				<div className="mb-5">
-					<h1 className="text-2xl font-bold tracking-tight text-slate-900">
-						简历库
-					</h1>
-					<p className="mt-1 text-sm text-slate-500">
+			<main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+				<div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+					<div>
+						<p className="mb-1 text-xs font-semibold text-slate-400">
+							本地工作台
+						</p>
+						<h1 className="text-2xl font-bold tracking-tight text-slate-900">
+							简历库
+						</h1>
+					</div>
+					<span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200/70 bg-white/55 px-3 py-1 text-xs font-medium text-slate-400">
+						<LayoutGrid size={14} />
 						共 {documents.length} 份本地简历
-					</p>
+					</span>
 				</div>
 
-				<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+					<CreateResumeCard onClick={() => setCreating(true)} />
 					{documents.map((document) => (
 						<ResumeCard
 							key={document.id}
@@ -267,16 +304,6 @@ const ResumeManager = ({
 							onDelete={() => onDelete(document.id)}
 						/>
 					))}
-					<button
-						type="button"
-						onClick={() => setCreating(true)}
-						className="flex min-h-[190px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white/60 p-4 text-slate-400 transition hover:border-blue-300 hover:bg-blue-50/50 hover:text-blue-600"
-					>
-						<span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-dashed border-current">
-							<Plus size={22} />
-						</span>
-						<span className="text-sm font-medium">新建简历</span>
-					</button>
 				</div>
 			</main>
 

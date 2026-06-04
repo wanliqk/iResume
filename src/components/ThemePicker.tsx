@@ -1,5 +1,6 @@
 import { Check, Palette, Star } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { themeIds, themes } from "../data/themes";
 import type { ThemeId } from "../types/theme";
 
@@ -17,25 +18,6 @@ const ThemePicker = ({
 	onToggleFavorite,
 }: ThemePickerProps) => {
 	const [open, setOpen] = useState(false);
-	const panelRef = useRef<HTMLDivElement>(null);
-	const buttonRef = useRef<HTMLButtonElement>(null);
-
-	// 点击外部关闭
-	useEffect(() => {
-		if (!open) return;
-		const handleClick = (e: MouseEvent) => {
-			if (
-				panelRef.current &&
-				!panelRef.current.contains(e.target as Node) &&
-				buttonRef.current &&
-				!buttonRef.current.contains(e.target as Node)
-			) {
-				setOpen(false);
-			}
-		};
-		document.addEventListener("mousedown", handleClick);
-		return () => document.removeEventListener("mousedown", handleClick);
-	}, [open]);
 
 	// ESC 关闭
 	useEffect(() => {
@@ -57,133 +39,130 @@ const ThemePicker = ({
 	}, [favoriteThemeIds]);
 
 	return (
-		<div className="relative">
+		<>
 			{/* 触发按钮 */}
 			<button
-				ref={buttonRef}
 				type="button"
 				onClick={() => setOpen((v) => !v)}
-				className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+				className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100/80"
 				title="切换简历主题"
 			>
-				<Palette size={16} />
+				<Palette size={14} className="text-slate-400" />
 				<span className="hidden sm:inline">{currentTheme.name}</span>
 			</button>
 
-			{/* 下拉面板 */}
-			{open && (
-				<div
-					ref={panelRef}
-					className="absolute right-0 top-full mt-2 z-50 w-[340px] max-w-[calc(100vw-1.5rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-xl"
-					style={{
-						animation: "fadeSlideIn 0.15s ease-out",
-					}}
-				>
-					{/* 标题 */}
-					<div className="flex items-center gap-2 px-2 pb-3 border-b border-slate-100 mb-3">
-						<Palette size={14} className="text-slate-400" />
-						<span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-							选择主题
-						</span>
-					</div>
-
-					{/* 主题卡片列表 */}
-					<div className="max-h-[60vh] space-y-1.5 overflow-y-auto pr-1">
-						{orderedThemeIds.map((id) => {
-							const theme = themes[id];
-							const isActive = id === current;
-							const isFavorite = favoriteThemeIds.includes(id);
-							return (
-								<div
-									key={id}
-									className={`
-										w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all duration-150
-										${
-											isActive
-												? "bg-slate-100 ring-1 ring-slate-300"
-												: "hover:bg-slate-50"
-										}
-									`}
-								>
-									<button
-										type="button"
-										onClick={() => {
-											onChange(id);
-											setOpen(false);
-										}}
-										className="flex min-w-0 flex-1 items-center gap-3 text-left"
-									>
-										{/* 色块预览 */}
-										<div className="relative shrink-0 w-9 h-9 rounded-lg overflow-hidden shadow-sm border border-slate-200/60">
-											{/* 上半 - 主色 */}
-											<div
-												className="absolute inset-x-0 top-0 h-1/2"
-												style={{ backgroundColor: theme.previewColors[0] }}
-											/>
-											{/* 下半 - 浅色 */}
-											<div
-												className="absolute inset-x-0 bottom-0 h-1/2"
-												style={{ backgroundColor: theme.previewColors[1] }}
-											/>
-											{/* 选中勾 */}
-											{isActive && (
-												<div className="absolute inset-0 flex items-center justify-center bg-black/20">
-													<Check
-														size={14}
-														className="text-white drop-shadow"
-													/>
-												</div>
-											)}
-										</div>
-
-										{/* 文字 */}
-										<div className="min-w-0 flex-1">
-											<div className="flex items-center gap-2">
-												<span
-													className={`text-sm font-semibold ${isActive ? "text-slate-900" : "text-slate-700"}`}
-												>
-													{theme.name}
-												</span>
-												<span className="text-[10px] text-slate-400 font-medium">
-													{theme.nameEn}
-												</span>
-											</div>
-											<p className="text-[11px] text-slate-400 leading-snug mt-0.5 truncate">
-												{theme.description}
-											</p>
-										</div>
-									</button>
-
-									{/* 当前指示器 */}
-									{isActive && (
-										<span className="shrink-0 text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-											当前
-										</span>
-									)}
-
-									<button
-										type="button"
-										onClick={() => onToggleFavorite(id)}
-										className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${
-											isFavorite
-												? "text-amber-500 hover:bg-amber-50"
-												: "text-slate-300 hover:bg-slate-100 hover:text-slate-500"
-										}`}
-										title={isFavorite ? "取消收藏主题" : "收藏主题"}
-										aria-label={isFavorite ? "取消收藏主题" : "收藏主题"}
-									>
-										<Star
-											size={15}
-											fill={isFavorite ? "currentColor" : "none"}
-										/>
-									</button>
+			{open &&
+				createPortal(
+					<div
+						className="fixed inset-0 z-[80] bg-slate-900/10 px-3 py-12 backdrop-blur-[1px]"
+						onMouseDown={() => setOpen(false)}
+					>
+						<div
+							className="mx-auto flex max-h-[min(680px,calc(100vh-6rem))] w-full max-w-[520px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-2xl shadow-slate-900/15"
+							style={{ animation: "fadeSlideIn 0.15s ease-out" }}
+							onMouseDown={(event) => event.stopPropagation()}
+						>
+							<div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+								<div className="flex items-center gap-2">
+									<Palette size={15} className="text-slate-400" />
+									<span className="text-sm font-bold text-slate-800">
+										选择主题
+									</span>
 								</div>
-							);
-						})}
-					</div>
-				</div>
-			)}
-		</div>
+								<span className="text-xs text-slate-400">
+									{orderedThemeIds.length} 个
+								</span>
+							</div>
+
+							<div className="min-h-0 flex-1 overflow-y-auto p-3 custom-scrollbar">
+								<div className="grid gap-2 sm:grid-cols-2">
+									{orderedThemeIds.map((id) => {
+										const theme = themes[id];
+										const isActive = id === current;
+										const isFavorite = favoriteThemeIds.includes(id);
+										return (
+											<div
+												key={id}
+												className={`flex items-center gap-2 rounded-lg border p-2 text-left transition ${
+													isActive
+														? "border-blue-200 bg-blue-50/70"
+														: "border-slate-200/70 bg-white hover:border-slate-300 hover:bg-slate-50"
+												}`}
+											>
+												<button
+													type="button"
+													onClick={() => {
+														onChange(id);
+														setOpen(false);
+													}}
+													className="flex min-w-0 flex-1 items-center gap-3 text-left"
+												>
+													<div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-200/70 shadow-sm">
+														<div
+															className="absolute inset-x-0 top-0 h-1/2"
+															style={{
+																backgroundColor: theme.previewColors[0],
+															}}
+														/>
+														<div
+															className="absolute inset-x-0 bottom-0 h-1/2"
+															style={{
+																backgroundColor: theme.previewColors[1],
+															}}
+														/>
+														{isActive && (
+															<div className="absolute inset-0 flex items-center justify-center bg-black/20">
+																<Check
+																	size={14}
+																	className="text-white drop-shadow"
+																/>
+															</div>
+														)}
+													</div>
+
+													<div className="min-w-0 flex-1">
+														<div className="flex items-center gap-2">
+															<span className="truncate text-sm font-semibold text-slate-800">
+																{theme.name}
+															</span>
+															{isActive && (
+																<span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
+																	当前
+																</span>
+															)}
+														</div>
+														<p className="mt-0.5 truncate text-[11px] leading-snug text-slate-400">
+															{theme.nameEn} · {theme.description}
+														</p>
+													</div>
+												</button>
+
+												<button
+													type="button"
+													onClick={() => onToggleFavorite(id)}
+													className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
+														isFavorite
+															? "text-amber-500 hover:bg-amber-50"
+															: "text-slate-300 hover:bg-slate-100 hover:text-slate-500"
+													}`}
+													title={isFavorite ? "取消收藏主题" : "收藏主题"}
+													aria-label={isFavorite ? "取消收藏主题" : "收藏主题"}
+												>
+													<Star
+														size={15}
+														fill={isFavorite ? "currentColor" : "none"}
+													/>
+												</button>
+											</div>
+										);
+									})}
+								</div>
+							</div>
+						</div>
+					</div>,
+					document.body,
+				)}
+		</>
 	);
 };
 
