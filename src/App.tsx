@@ -1934,9 +1934,6 @@ function App() {
 																	}mm`,
 																}}
 															/>
-															<span className="pointer-events-none absolute right-3 top-3 z-20 rounded-full border border-slate-200/70 bg-white/70 px-2 py-0.5 text-[10px] font-medium text-slate-400/80 opacity-80 shadow-sm backdrop-blur-sm">
-																第 {index + 1} 页
-															</span>
 														</div>
 													),
 												)}
