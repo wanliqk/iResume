@@ -67,6 +67,7 @@ export const initialResumeState: ResumeData = {
 		{
 			id: 1,
 			name: "企业级全栈后台管理系统 (个人开源)",
+			date: "2023.03 - 2024.02",
 			tags: "Next.js 14, TypeScript, Tailwind CSS, Prisma",
 			link: "admin-demo.com",
 			source: "github.com/linxiaoming/admin",
@@ -76,6 +77,7 @@ export const initialResumeState: ResumeData = {
 		{
 			id: 2,
 			name: "轻量级响应式状态管理库",
+			date: "2022.06 - 2023.01",
 			tags: "TypeScript, Rollup, Proxy",
 			link: "npmjs.com/package/mini-store",
 			source: "github.com/linxiaoming/mini-store",

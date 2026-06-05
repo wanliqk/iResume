@@ -13,18 +13,49 @@
 }
 
 /* 自定义滚动条样式 */
+.custom-scrollbar {
+	scrollbar-width: thin;
+	scrollbar-color: rgb(148 163 184 / 28%) transparent;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-	width: 6px;
+	width: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-	background: #f1f5f9;
+	background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-	background: #cbd5e1;
-	border-radius: 3px;
+	background: rgb(148 163 184 / 0%);
+	border-radius: 999px;
 }
+.custom-scrollbar:hover::-webkit-scrollbar-thumb,
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-	background: #94a3b8;
+	background: rgb(148 163 184 / 35%);
+}
+
+.scrollbar-none {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+	display: none;
+}
+
+html.resume-space-panning,
+body.resume-space-panning {
+	overflow: hidden;
+}
+
+.canvas-pan-ready,
+.canvas-pan-ready * {
+	cursor: grab !important;
+}
+
+.canvas-panning,
+.canvas-panning * {
+	cursor: grabbing !important;
+	user-select: none !important;
 }
 
 /* =====================================================
@@ -82,6 +113,9 @@
 	.print\:p-0 {
 		padding: 0 !important;
 	}
+	.print\:pb-0 {
+		padding-bottom: 0 !important;
+	}
 	.print\:bg-white {
 		background: white !important;
 	}
@@ -90,6 +124,17 @@
 	}
 
 	/* A4 纸张容器：去掉固定宽高和阴影，让内容自由流动 */
+	.resume-preview-scale-shell {
+		width: auto !important;
+		height: auto !important;
+	}
+
+	.resume-preview-scale {
+		transform: none !important;
+		width: auto !important;
+		min-height: 0 !important;
+	}
+
 	.print\:shadow-none {
 		box-shadow: none !important;
 	}
@@ -102,7 +147,7 @@
 	}
 
 	/* ── ResumePreview 根元素 ──────────────────────
-	   去掉内边距（由 @page margin 接管），
+	   去掉屏幕预览内边距（由 @page margin 接管），
 	   去掉最小高度（不再需要撑满一页）。              */
 	.resume-print-root {
 		padding: 0 !important;
@@ -165,6 +210,60 @@
    不使用 break-all，避免影响中文文本的正常排版。
    ===================================================== */
 .resume-content {
+	--resume-page-margin: 12mm;
 	overflow-wrap: break-word;
 	word-break: break-word;
+}
+
+.resume-banner-header {
+	margin-top: calc(var(--resume-page-margin) * -1);
+	margin-right: calc(var(--resume-page-margin) * -1);
+	margin-left: calc(var(--resume-page-margin) * -1);
+}
+
+.resume-banner-inner {
+	padding: calc(var(--resume-page-margin) * 0.65) var(--resume-page-margin)
+		calc(var(--resume-page-margin) * 0.6);
+}
+
+@media screen {
+	.resume-editable-section {
+		border-radius: 2px;
+		cursor: text;
+		outline: 1px solid transparent;
+		outline-offset: 5px;
+		transition: outline-color 120ms ease;
+	}
+
+	.resume-editable-section:hover {
+		outline-color: rgb(59 130 246 / 18%);
+	}
+}
+
+.resume-content[data-font-scaled="true"] {
+	font-size: calc(10.5pt * var(--resume-font-scale));
+}
+
+.resume-content[data-font-scaled="true"] .text-xs {
+	font-size: calc(0.75rem * var(--resume-font-scale));
+}
+
+.resume-content[data-font-scaled="true"] .text-sm {
+	font-size: calc(0.875rem * var(--resume-font-scale));
+}
+
+.resume-content[data-font-scaled="true"] .text-base {
+	font-size: calc(1rem * var(--resume-font-scale));
+}
+
+.resume-content[data-font-scaled="true"] .text-lg {
+	font-size: calc(1.125rem * var(--resume-font-scale));
+}
+
+.resume-content[data-font-scaled="true"] .text-3xl {
+	font-size: calc(1.875rem * var(--resume-font-scale));
+}
+
+.resume-content[data-font-scaled="true"] .text-\[11px\] {
+	font-size: calc(11px * var(--resume-font-scale));
 }

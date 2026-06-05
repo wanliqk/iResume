@@ -30,6 +30,7 @@ export interface Experience {
 export interface Project {
 	id: number;
 	name: string;
+	date: string;
 	tags: string;
 	link: string;
 	source: string;
@@ -60,6 +61,9 @@ export type SectionKey =
 	| "projects"
 	| "education"
 	| "other";
+
+// 控制各区块标题图标是否显示
+export type SectionIconVisibility = Record<SectionKey, boolean>;
 
 // 简历数据
 export interface ResumeData {

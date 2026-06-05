@@ -2,9 +2,15 @@
 export type ThemeId =
 	| "classic"
 	| "minimal"
+	| "outline"
+	| "ats"
+	| "timeline"
+	| "focus"
 	| "executive"
 	| "fresh"
 	| "elegant"
+	| "mono"
+	| "sage"
 	| "rose"
 	| "aurora";
 
@@ -37,7 +43,7 @@ export interface ThemeColors {
 }
 
 // 主题头部布局
-export type HeaderLayout = "split" | "centered" | "banner";
+export type HeaderLayout = "split" | "centered" | "banner" | "accent";
 
 // 区块标题样式
 export type SectionHeaderStyle =
@@ -60,6 +66,38 @@ export type FontStyle =
 	| "sans" // 无衬线（默认）
 	| "serif"; // 衬线字体
 
+// 内容密度
+export type ContentDensity =
+	| "standard" // 默认节奏
+	| "compact" // 一页优先
+	| "airy"; // 更舒展
+
+// 技能区布局
+export type SkillLayout =
+	| "rows" // 左 label + 右内容（默认）
+	| "inline" // 紧凑行内
+	| "columns" // 双列信息组
+	| "chips"; // 技能标签
+
+// 经历/项目条目风格
+export type EntryStyle =
+	| "plain" // 默认
+	| "compact" // 信息更密
+	| "timeline"; // 左侧时间线
+
+// 项目区风格
+export type ProjectStyle =
+	| "plain" // 默认
+	| "compact" // 一页优先
+	| "boxed" // 轻边框强调
+	| "timeline"; // 左侧时间线
+
+// 标签风格
+export type TagStyle =
+	| "soft" // 默认浅底色
+	| "outline" // 线框
+	| "plain"; // 纯文本
+
 // 主题配置
 export interface ThemeConfig {
 	id: ThemeId;
@@ -76,18 +114,26 @@ export interface ThemeConfig {
 	sectionHeaderStyle: SectionHeaderStyle;
 	// 联系方式样式
 	contactStyle: ContactStyle;
-	// 是否在技能区块使用 grid 标签布局
-	skillGrid: boolean;
 	// 头部是否显示底部分割线
 	headerDivider: boolean;
 	// 链接区域是否显示图标
 	showLinkIcons: boolean;
 	// 联系信息是否显示图标
 	showContactIcons: boolean;
+	// 区块标题是否显示线性图标
+	showSectionIcons?: boolean;
 	// 字体风格（可选，默认 sans）
 	fontStyle?: FontStyle;
-	// 姓名区域是否显示彩色徽章背景（banner 布局以外）
-	nameBadge?: boolean;
+	// 内容密度（可选，默认 standard）
+	contentDensity?: ContentDensity;
+	// 技能区布局（可选，默认 rows）
+	skillLayout?: SkillLayout;
+	// 工作经历条目布局（可选，默认 plain）
+	experienceStyle?: EntryStyle;
+	// 项目条目布局（可选，默认 plain）
+	projectStyle?: ProjectStyle;
+	// 项目标签样式（可选，默认 soft）
+	tagStyle?: TagStyle;
 	// banner 布局背景色（Tailwind 类，默认 bg-slate-800）
 	bannerBg?: string;
 	// banner 布局强调色，用于职位标题文字和链接悬停（Tailwind 类，默认 text-amber-400）
