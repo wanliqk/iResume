@@ -8,12 +8,11 @@ interface PreviewPageModeControlProps {
 
 const options: {
 	value: PreviewPageMode;
-	label: string;
 	title: string;
 	icon: typeof Rows3;
 }[] = [
-	{ value: "continuous", label: "连续", title: "连续预览", icon: Rows3 },
-	{ value: "paged", label: "分页", title: "分页预览", icon: Files },
+	{ value: "continuous", title: "连续预览", icon: Rows3 },
+	{ value: "paged", title: "分页预览", icon: Files },
 ];
 
 const PreviewPageModeControl = ({
@@ -32,7 +31,7 @@ const PreviewPageModeControl = ({
 					key={option.value}
 					type="button"
 					onClick={() => onChange(option.value)}
-					className={`flex h-6 items-center justify-center gap-1 rounded px-1.5 font-medium transition-colors sm:px-2 ${
+					className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
 						active
 							? "bg-slate-100 text-slate-700"
 							: "text-slate-400 hover:bg-slate-100/80 hover:text-slate-700"
@@ -42,7 +41,6 @@ const PreviewPageModeControl = ({
 					aria-pressed={active}
 				>
 					<Icon size={13} />
-					<span className="hidden sm:inline">{option.label}</span>
 				</button>
 			);
 		})}
