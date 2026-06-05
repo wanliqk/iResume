@@ -51,6 +51,8 @@ export default async function handler(request, response) {
 
 	response.status(200).json({
 		login: user.login,
+		avatarUrl:
+			typeof user.avatar_url === "string" ? user.avatar_url : undefined,
 		syncKey: toBase64(syncKey),
 	});
 }

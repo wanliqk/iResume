@@ -58,16 +58,37 @@ body.resume-space-panning {
 	user-select: none !important;
 }
 
+@media screen and (max-width: 767px) {
+	input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+			[type="file"]
+		),
+	textarea,
+	select {
+		font-size: 16px !important;
+		line-height: 1.5;
+	}
+}
+
+@media screen {
+	.resume-print-source {
+		position: fixed;
+		top: 0;
+		left: -10000px;
+		width: 210mm;
+		pointer-events: none;
+	}
+}
+
 /* =====================================================
    打印 / 保存 PDF 样式
    ===================================================== */
 @media print {
-	/* ── 页面尺寸与边距 ──────────────────────────────
-	   @page margin 统一控制每一页（包括第 2、3 页）的
-	   四周留白，彻底替代容器的 padding。               */
+	/* ── 页面尺寸 ──────────────────────────────────
+	   纸张不使用浏览器页边距。简历根容器负责正文留白，
+	   这样 banner 主题可以真正铺满页面左右。             */
 	@page {
 		size: A4;
-		margin: 12mm 12mm;
+		margin: 0;
 	}
 
 	/* ── 全局基底 ─────────────────────────────────── */
@@ -135,6 +156,18 @@ body.resume-space-panning {
 		min-height: 0 !important;
 	}
 
+	.resume-paged-visual {
+		display: none !important;
+	}
+
+	.resume-print-source {
+		position: static !important;
+		top: auto !important;
+		left: auto !important;
+		width: auto !important;
+		pointer-events: auto !important;
+	}
+
 	.print\:shadow-none {
 		box-shadow: none !important;
 	}
@@ -147,14 +180,30 @@ body.resume-space-panning {
 	}
 
 	/* ── ResumePreview 根元素 ──────────────────────
-	   去掉屏幕预览内边距（由 @page margin 接管），
-	   去掉最小高度（不再需要撑满一页）。              */
+	   @page 保持 0 边距，根元素在每个分页片段复制 padding，
+	   让正文每页都有留白，同时允许 banner 抵消留白铺满宽度。 */
 	.resume-print-root {
-		padding: 0 !important;
+		box-sizing: border-box !important;
+		padding: var(--resume-page-margin) !important;
 		min-height: 0 !important;
 		width: 100% !important;
 		background: white !important;
 		box-shadow: none !important;
+		-webkit-box-decoration-break: clone;
+		box-decoration-break: clone;
+	}
+
+	.resume-banner-header {
+		margin-top: calc(var(--resume-page-margin) * -1) !important;
+		margin-right: calc(var(--resume-page-margin) * -1) !important;
+		margin-left: calc(var(--resume-page-margin) * -1) !important;
+		overflow: visible !important;
+	}
+
+	.resume-banner-inner {
+		box-sizing: border-box !important;
+		padding-right: var(--resume-page-margin) !important;
+		padding-left: var(--resume-page-margin) !important;
 	}
 
 	/* ── 分页策略 ──────────────────────────────────
@@ -179,6 +228,20 @@ body.resume-space-panning {
 	.print-item-header {
 		break-inside: avoid;
 		break-after: avoid;
+	}
+
+	.print-timeline-item {
+		margin-left: 0.375rem;
+		overflow: visible !important;
+	}
+
+	.print-timeline-dot {
+		left: -0.3125rem !important;
+	}
+
+	.print-card-item {
+		break-inside: avoid;
+		overflow: visible !important;
 	}
 
 	/* 教育条目（每行很短，整行保护） */

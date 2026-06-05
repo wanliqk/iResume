@@ -429,7 +429,7 @@ const ResumeEditor = ({
 					value={data.personal.title}
 					onChange={(value) => updatePersonal("title", value)}
 				/>
-				<div className="grid grid-cols-2 gap-2">
+				<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
 					<InputGroup
 						label="电话"
 						value={data.personal.phone}
@@ -642,7 +642,7 @@ const ResumeEditor = ({
 								)
 							}
 						/>
-						<div className="grid grid-cols-2 gap-2">
+						<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
 							<InputGroup
 								label="职位"
 								value={experience.role}
@@ -742,7 +742,7 @@ const ResumeEditor = ({
 								updateArrayItem<Project>("projects", project.id, "name", value)
 							}
 						/>
-						<div className="grid grid-cols-[minmax(0,1fr)_120px] gap-2">
+						<div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
 							<InputGroup
 								label="技术标签"
 								value={project.tags}
@@ -769,7 +769,7 @@ const ResumeEditor = ({
 								placeholder="例：2024.03"
 							/>
 						</div>
-						<div className="grid grid-cols-2 gap-2">
+						<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
 							<InputGroup
 								label="Demo"
 								value={project.link}

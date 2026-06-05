@@ -65,6 +65,7 @@ type CloudSyncStatus = "idle" | "connecting" | "uploading" | "downloading";
 interface CloudSyncViewState {
 	connected: boolean;
 	login?: string;
+	avatarUrl?: string;
 	gistId: string;
 	lastDirection?: "push" | "pull";
 	lastSyncedAt?: string;
@@ -87,6 +88,10 @@ const formatUpdatedAt = (value: string) => {
 
 const inputClass =
 	"w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500";
+
+const getGitHubAvatarUrl = (cloudSync: CloudSyncViewState) =>
+	cloudSync.avatarUrl ||
+	(cloudSync.login ? `https://github.com/${cloudSync.login}.png?size=64` : "");
 
 const BrandMark = () => (
 	<div className="flex items-center gap-2 text-xl font-bold">
@@ -298,10 +303,10 @@ const CreateResumeModal = ({
 	};
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/15 px-4 backdrop-blur-[2px]">
+		<div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/15 px-4 py-4 backdrop-blur-[2px]">
 			<form
 				onSubmit={submit}
-				className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-lg shadow-slate-900/[0.08]"
+				className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-slate-200 bg-white p-5 shadow-lg shadow-slate-900/[0.08]"
 			>
 				<div className="mb-4 flex items-center gap-3">
 					<span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-500">
@@ -421,8 +426,8 @@ const UserSettingsModal = ({
 	};
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/15 px-4 backdrop-blur-[2px]">
-			<div className="w-full max-w-xl rounded-lg border border-slate-200 bg-slate-50 p-4 shadow-lg shadow-slate-900/[0.08]">
+		<div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/15 px-4 py-4 backdrop-blur-[2px]">
+			<div className="max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4 shadow-lg shadow-slate-900/[0.08]">
 				<input
 					ref={inputRef}
 					type="file"
@@ -477,34 +482,45 @@ const UserSettingsModal = ({
 					<section className="rounded-lg border border-slate-200/80 bg-white p-4">
 						<div className="mb-4 flex items-start justify-between gap-3">
 							<div>
-									<h3 className="text-sm font-bold text-slate-800">
-										GitHub Gist 云同步
-									</h3>
-									<p className="mt-1 text-xs leading-relaxed text-slate-400">
-										登录后自动加密同步。
-									</p>
+								<h3 className="text-sm font-bold text-slate-800">
+									GitHub Gist 云同步
+								</h3>
+								<p className="mt-1 text-xs leading-relaxed text-slate-400">
+									登录后自动加密同步。
+								</p>
+							</div>
+							{cloudSync.connected ? (
+								<div className="flex max-w-36 items-center gap-2 rounded-full border border-blue-100 bg-blue-50/70 py-1 pl-1 pr-2 text-blue-600">
+									{getGitHubAvatarUrl(cloudSync) ? (
+										<img
+											src={getGitHubAvatarUrl(cloudSync)}
+											alt=""
+											className="h-6 w-6 rounded-full bg-white object-cover ring-1 ring-white"
+										/>
+									) : (
+										<span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-bold">
+											{(cloudSync.login || "G").slice(0, 1).toUpperCase()}
+										</span>
+									)}
+									<span className="min-w-0 truncate text-[11px] font-medium">
+										{cloudSync.login || "已连接"}
+									</span>
 								</div>
-							<span
-								className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-									cloudSync.connected
-										? "bg-blue-50 text-blue-600"
-										: "bg-slate-100 text-slate-400"
-								}`}
-							>
-								{cloudSync.connected
-									? cloudSync.login || "已连接"
-									: "未连接"}
-							</span>
+							) : (
+								<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-400">
+									未连接
+								</span>
+							)}
 						</div>
 
-								<div className="rounded-md bg-slate-50 px-3 py-2">
-									<span className="text-xs font-medium text-slate-400">
-										同步状态
-									</span>
-									<p className="mt-1 text-sm font-semibold text-slate-700">
-										{cloudSync.connected ? "已准备同步" : "连接后可同步"}
-									</p>
-								</div>
+						<div className="rounded-md bg-slate-50 px-3 py-2">
+							<span className="text-xs font-medium text-slate-400">
+								同步状态
+							</span>
+							<p className="mt-1 text-sm font-semibold text-slate-700">
+								{cloudSync.connected ? "已准备同步" : "连接后可同步"}
+							</p>
+						</div>
 
 						<div className="mt-4 flex flex-wrap gap-2">
 							{cloudSync.connected ? (
@@ -527,21 +543,21 @@ const UserSettingsModal = ({
 									连接 GitHub
 								</button>
 							)}
-								<button
-									type="button"
-									onClick={() => void onCloudPush()}
-									disabled={!canUseCloud}
+							<button
+								type="button"
+								onClick={() => void onCloudPush()}
+								disabled={!canUseCloud}
 								className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
 							>
 								<CloudUpload size={15} />
 								上传到云端
 							</button>
-									<button
-										type="button"
-										onClick={() => void onCloudPull()}
-										disabled={!canUseCloud}
-									className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
-								>
+							<button
+								type="button"
+								onClick={() => void onCloudPull()}
+								disabled={!canUseCloud}
+								className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+							>
 								<CloudDownload size={15} />
 								从云端恢复
 							</button>
@@ -557,8 +573,8 @@ const UserSettingsModal = ({
 							<div className="rounded-md bg-slate-50 px-3 py-2">
 								<span className="flex items-center gap-1.5 font-medium text-slate-500">
 									<ShieldCheck size={13} />
-										加密方式
-									</span>
+									加密方式
+								</span>
 								<span className="mt-1 block">AES-GCM 自动密钥</span>
 							</div>
 						</div>
