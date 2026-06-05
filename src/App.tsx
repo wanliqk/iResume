@@ -24,6 +24,7 @@ import {
 } from "react";
 import FontSizeControl from "./components/FontSizeControl";
 import PageMarginControl from "./components/PageMarginControl";
+import PreviewPageModeControl from "./components/PreviewPageModeControl";
 import PreviewZoomControl from "./components/PreviewZoomControl";
 import ResumeEditor from "./components/ResumeEditor";
 import ResumeDisplayPreferencesEditor from "./components/ResumeDisplayPreferencesEditor";
@@ -65,6 +66,11 @@ import {
 	type PreviewZoom,
 } from "./data/previewZoom";
 import {
+	DEFAULT_PREVIEW_PAGE_MODE,
+	normalizePreviewPageMode,
+	type PreviewPageMode,
+} from "./data/previewPageMode";
+import {
 	DEFAULT_SECTION_PREFERENCES,
 	DEFAULT_RESUME_FONT_SIZE_PT,
 	DEFAULT_RESUME_PAGE_MARGIN_MM,
@@ -93,12 +99,14 @@ const SECTION_ICONS_UNIFIED_MIGRATION_KEY = "resume-section-icons-unified-v2";
 const FAVORITE_THEMES_STORAGE_KEY = "resume-favorite-themes";
 const LIBRARY_STORAGE_KEY = "resume-library";
 const PREVIEW_ZOOM_STORAGE_KEY = "resume-preview-zoom";
+const PREVIEW_PAGE_MODE_STORAGE_KEY = "resume-preview-page-mode";
 const APP_VIEW_STORAGE_KEY = "resume-app-view";
 const CLOUD_SYNC_AUTH_STORAGE_KEY = "resume-cloud-sync-auth";
 const CLOUD_SYNC_SETTINGS_STORAGE_KEY = "resume-cloud-sync-settings";
 const CLOUD_SYNC_OAUTH_STATE_STORAGE_KEY = "resume-cloud-sync-oauth-state";
 const A4_HEIGHT_MM = 297;
 const A4_WIDTH_MM = 210;
+const PREVIEW_PAGE_GAP_MM = 10;
 
 type CloudSyncStatus = "idle" | "connecting" | "uploading" | "downloading";
 
@@ -108,6 +116,12 @@ interface UserDataBackup {
 	library: ResumeLibrary;
 	favoriteThemeIds: ThemeId[];
 	previewZoom: PreviewZoom;
+	previewPageMode: PreviewPageMode;
+}
+
+interface PreviewPageLayout {
+	startMm: number;
+	bottomBlankMm: number;
 }
 
 interface CloudSyncAuth {
@@ -116,6 +130,7 @@ interface CloudSyncAuth {
 	tokenType?: string;
 	scope?: string;
 	login?: string;
+	avatarUrl?: string;
 	connectedAt: string;
 }
 
@@ -179,6 +194,8 @@ const readCloudSyncAuth = (): CloudSyncAuth | null => {
 				typeof value.tokenType === "string" ? value.tokenType : undefined,
 			scope: typeof value.scope === "string" ? value.scope : undefined,
 			login: typeof value.login === "string" ? value.login : undefined,
+			avatarUrl:
+				typeof value.avatarUrl === "string" ? value.avatarUrl : undefined,
 			connectedAt:
 				typeof value.connectedAt === "string"
 					? value.connectedAt
@@ -476,6 +493,9 @@ function App() {
 		"idle" | "exporting" | "error"
 	>("idle");
 	const [previewPageCount, setPreviewPageCount] = useState(1);
+	const [previewPageLayouts, setPreviewPageLayouts] = useState<
+		PreviewPageLayout[]
+	>([{ startMm: 0, bottomBlankMm: 0 }]);
 	const [activeSection, setActiveSection] = useState<SectionKey>("skills");
 	const [isSpacePanning, setIsSpacePanning] = useState(false);
 	const [isPanning, setIsPanning] = useState(false);
@@ -486,6 +506,12 @@ function App() {
 	const [previewZoom, setPreviewZoom] = useState<PreviewZoom>(() =>
 		normalizePreviewZoom(
 			localStorage.getItem(PREVIEW_ZOOM_STORAGE_KEY) ?? DEFAULT_PREVIEW_ZOOM,
+		),
+	);
+	const [previewPageMode, setPreviewPageMode] = useState<PreviewPageMode>(() =>
+		normalizePreviewPageMode(
+			localStorage.getItem(PREVIEW_PAGE_MODE_STORAGE_KEY) ??
+				DEFAULT_PREVIEW_PAGE_MODE,
 		),
 	);
 
@@ -559,6 +585,10 @@ function App() {
 	}, [previewZoom]);
 
 	useEffect(() => {
+		localStorage.setItem(PREVIEW_PAGE_MODE_STORAGE_KEY, previewPageMode);
+	}, [previewPageMode]);
+
+	useEffect(() => {
 		const params = new URLSearchParams(window.location.search);
 		const code = params.get("code");
 		const state = params.get("state");
@@ -598,6 +628,7 @@ function App() {
 				setCloudSyncAuth({
 					...token,
 					login: syncKey.login,
+					avatarUrl: syncKey.avatarUrl,
 					syncKey: syncKey.syncKey,
 					connectedAt: new Date().toISOString(),
 				});
@@ -837,8 +868,9 @@ function App() {
 			library,
 			favoriteThemeIds,
 			previewZoom,
+			previewPageMode,
 		}),
-		[favoriteThemeIds, library, previewZoom],
+		[favoriteThemeIds, library, previewPageMode, previewZoom],
 	);
 
 	const applyUserDataBackup = useCallback((parsed: unknown): string | null => {
@@ -858,6 +890,11 @@ function App() {
 			}
 			if (parsed.previewZoom !== undefined) {
 				setPreviewZoom(normalizePreviewZoom(parsed.previewZoom));
+			}
+			if (parsed.previewPageMode !== undefined) {
+				setPreviewPageMode(
+					normalizePreviewPageMode(parsed.previewPageMode),
+				);
 			}
 		}
 
@@ -1010,18 +1047,6 @@ function App() {
 			setCloudSyncStatus("idle");
 		}
 	};
-
-	useEffect(() => {
-		const styleId = "resume-print-page-margin";
-		let style = document.getElementById(styleId) as HTMLStyleElement | null;
-		if (!style) {
-			style = document.createElement("style");
-			style.id = styleId;
-			document.head.appendChild(style);
-		}
-
-		style.textContent = `@media print { @page { size: A4; margin: ${pageMarginMm}mm ${pageMarginMm}mm; } }`;
-	}, [pageMarginMm]);
 
 	useEffect(() => {
 		if (!importError) return;
@@ -1256,15 +1281,89 @@ function App() {
 			1,
 			getPrintablePageHeightMm(pageMarginMm) * pxPerMm,
 		);
-		const contentHeight = inner.getBoundingClientRect().height;
-		const nextPageCount = Math.max(
-			1,
-			Math.ceil(contentHeight / printablePageHeight - 0.01),
-		);
+		const innerRect = inner.getBoundingClientRect();
+		const contentHeight = innerRect.height;
+		const avoidBlocks = Array.from(
+			inner.querySelectorAll<HTMLElement>(
+				[
+					"header",
+					"section",
+					".print-timeline-item",
+					".print-card-item",
+					".print-edu-item",
+					".print-skill-row",
+					"li",
+				].join(","),
+			),
+		)
+			.map((element) => {
+				const rect = element.getBoundingClientRect();
+				return {
+					isSection: element.tagName === "SECTION",
+					top: rect.top - innerRect.top,
+					height: rect.height,
+				};
+			})
+			.filter(
+				(block) =>
+					block.height > 1 &&
+					block.height <
+						printablePageHeight * (block.isSection ? 0.35 : 0.92) &&
+					block.top >= 0,
+			)
+			.sort((a, b) => a.top - b.top);
+
+		const nextLayouts: PreviewPageLayout[] = [];
+		let pageStart = 0;
+		let guard = 0;
+
+		while (pageStart < contentHeight - 1 && guard < 20) {
+			const idealEnd = pageStart + printablePageHeight;
+			const crossingBlock = avoidBlocks.find((block) => {
+				const blockBottom = block.top + block.height;
+				return (
+					block.top > pageStart + 1 &&
+					block.top < idealEnd - 1 &&
+					blockBottom > idealEnd + 1
+				);
+			});
+			const pageEnd = crossingBlock ? crossingBlock.top : idealEnd;
+			const bottomBlank = Math.max(0, idealEnd - pageEnd);
+
+			nextLayouts.push({
+				startMm: pageStart / pxPerMm,
+				bottomBlankMm: bottomBlank / pxPerMm,
+			});
+
+			const nextStart = crossingBlock ? crossingBlock.top : idealEnd;
+			if (nextStart <= pageStart + 1) {
+				pageStart = idealEnd;
+			} else {
+				pageStart = nextStart;
+			}
+			guard += 1;
+		}
+
+		const safeLayouts =
+			nextLayouts.length > 0
+				? nextLayouts
+				: [{ startMm: 0, bottomBlankMm: 0 }];
+		const nextPageCount = safeLayouts.length;
 
 		setPreviewPageCount((current) =>
 			current === nextPageCount ? current : nextPageCount,
 		);
+		setPreviewPageLayouts((current) => {
+			const same =
+				current.length === safeLayouts.length &&
+				current.every(
+					(item, index) =>
+						Math.abs(item.startMm - safeLayouts[index].startMm) < 0.1 &&
+						Math.abs(item.bottomBlankMm - safeLayouts[index].bottomBlankMm) <
+							0.1,
+				);
+			return same ? current : safeLayouts;
+		});
 	}, [pageMarginMm]);
 
 	useEffect(() => {
@@ -1488,6 +1587,7 @@ function App() {
 					cloudSync={{
 						connected: Boolean(cloudSyncAuth),
 						login: cloudSyncAuth?.login,
+						avatarUrl: cloudSyncAuth?.avatarUrl,
 						gistId: cloudSyncSettings.gistId,
 						lastDirection: cloudSyncSettings.lastDirection,
 						lastSyncedAt: cloudSyncSettings.lastSyncedAt,
@@ -1517,6 +1617,11 @@ function App() {
 		rightPanelOpen ? "lg:right-[424px] xl:right-[448px]" : "lg:right-14",
 	].join(" ");
 	const currentThemeName = themes[themeId].name;
+	const previewCanvasHeightMm =
+		previewPageMode === "paged"
+			? previewPageCount * A4_HEIGHT_MM +
+				Math.max(0, previewPageCount - 1) * PREVIEW_PAGE_GAP_MM
+			: previewPageCount * A4_HEIGHT_MM;
 
 	return (
 		<div className="relative min-h-screen bg-slate-100 font-sans text-slate-900 print:h-auto print:min-h-0 print:overflow-visible print:bg-white lg:h-screen lg:overflow-hidden">
@@ -1574,6 +1679,10 @@ function App() {
 							)}
 							</div>
 							<PreviewZoomControl value={previewZoom} onChange={setPreviewZoom} />
+							<PreviewPageModeControl
+								value={previewPageMode}
+								onChange={setPreviewPageMode}
+							/>
 							<span className="ml-1 shrink-0 rounded-full border border-slate-200/60 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-slate-400 opacity-80 backdrop-blur-sm">
 								预计 {previewPageCount} 页
 							</span>
@@ -1582,7 +1691,7 @@ function App() {
 
 			{leftPanelOpen ? (
 				<div
-					className="p-3 print:hidden lg:pointer-events-none lg:fixed lg:inset-y-4 lg:left-4 lg:z-40 lg:w-[330px] lg:p-0 xl:w-[360px]"
+					className="p-3 pt-20 print:hidden lg:pointer-events-none lg:fixed lg:inset-y-4 lg:left-4 lg:z-40 lg:w-[330px] lg:p-0 xl:w-[360px]"
 					data-workbench-chrome="true"
 				>
 					<aside className="pointer-events-auto flex overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-2xl shadow-slate-900/10 backdrop-blur lg:h-full">
@@ -1614,7 +1723,7 @@ function App() {
 										<button
 											type="button"
 											onClick={() => setLeftPanelOpen(false)}
-											className="flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-100 hover:text-slate-700"
+											className="hidden h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-100 hover:text-slate-700 lg:flex"
 											title="折叠左侧面板"
 											aria-label="折叠左侧面板"
 										>
@@ -1725,45 +1834,111 @@ function App() {
 							<div
 								className="resume-preview-scale-shell print:w-auto"
 								style={{
-									height: `${previewPageCount * A4_HEIGHT_MM * previewZoom}mm`,
+									height: `${previewCanvasHeightMm * previewZoom}mm`,
 									width: `${A4_WIDTH_MM * previewZoom}mm`,
 								}}
 							>
 								<div
-									className="resume-preview-scale relative w-[210mm] bg-white shadow-2xl print:w-full print:min-h-0 print:bg-white print:shadow-none"
+									className="resume-preview-scale relative w-[210mm] print:w-full print:min-h-0 print:bg-white print:shadow-none"
 									style={{
-										minHeight: `${previewPageCount * A4_HEIGHT_MM}mm`,
+										minHeight: `${previewCanvasHeightMm}mm`,
 										transform: `scale(${previewZoom})`,
 										transformOrigin: "top left",
 									}}
 								>
-									<ResumePreview
-										ref={resumePreviewRef}
-										contentRef={resumePreviewInnerRef}
-										data={resumeData}
-										themeId={themeId}
-										fontSizePt={fontSizePt}
-										pageMarginMm={pageMarginMm}
-										sectionIcons={sectionIcons}
-										sectionPreferences={sectionPreferences}
-										minPageCount={previewPageCount}
-										onSectionClick={handlePreviewSectionClick}
-									/>
-									{Array.from(
-										{ length: previewPageCount - 1 },
-										(_, index) => (
-											<div
-												key={index}
-												className="pointer-events-none absolute left-0 right-0 z-10 border-t border-dashed border-blue-300/35 print:hidden"
-												style={{
-													top: `${pageMarginMm + (index + 1) * printablePageHeightMm}mm`,
-												}}
-											>
-												<span className="absolute right-3 -top-3 rounded-full border border-blue-100/70 bg-white/70 px-2 py-0.5 text-[10px] font-medium text-blue-400/75 opacity-80 shadow-sm backdrop-blur-sm">
-													第 {index + 2} 页
-												</span>
+									{previewPageMode === "continuous" ? (
+										<div className="relative bg-white shadow-2xl print:shadow-none">
+											<ResumePreview
+												ref={resumePreviewRef}
+												contentRef={resumePreviewInnerRef}
+												data={resumeData}
+												themeId={themeId}
+												fontSizePt={fontSizePt}
+												pageMarginMm={pageMarginMm}
+												sectionIcons={sectionIcons}
+												sectionPreferences={sectionPreferences}
+												minPageCount={previewPageCount}
+												onSectionClick={handlePreviewSectionClick}
+											/>
+											{Array.from(
+												{ length: previewPageCount - 1 },
+												(_, index) => (
+													<div
+														key={index}
+														className="pointer-events-none absolute left-0 right-0 z-10 border-t border-dashed border-blue-300/35 print:hidden"
+														style={{
+															top: `${pageMarginMm + (index + 1) * printablePageHeightMm}mm`,
+														}}
+													>
+														<span className="absolute right-3 -top-3 rounded-full border border-blue-100/70 bg-white/70 px-2 py-0.5 text-[10px] font-medium text-blue-400/75 opacity-80 shadow-sm backdrop-blur-sm">
+															第 {index + 2} 页
+														</span>
+													</div>
+												),
+											)}
+										</div>
+									) : (
+										<>
+											<div className="resume-print-source">
+												<ResumePreview
+													ref={resumePreviewRef}
+													contentRef={resumePreviewInnerRef}
+													data={resumeData}
+													themeId={themeId}
+													fontSizePt={fontSizePt}
+													pageMarginMm={pageMarginMm}
+													sectionIcons={sectionIcons}
+													sectionPreferences={sectionPreferences}
+													minPageCount={previewPageCount}
+													onSectionClick={handlePreviewSectionClick}
+												/>
 											</div>
-										),
+											<div
+												className="resume-paged-visual flex flex-col print:hidden"
+												style={{ gap: `${PREVIEW_PAGE_GAP_MM}mm` }}
+											>
+												{previewPageLayouts.map(
+													(pageLayout, index) => (
+														<div
+															key={index}
+															className="relative h-[297mm] w-[210mm] overflow-hidden bg-white shadow-2xl"
+														>
+															<div
+																className="absolute left-0 top-0 w-[210mm]"
+																style={{
+																	transform: `translateY(-${pageLayout.startMm}mm)`,
+																}}
+															>
+																<ResumePreview
+																	data={resumeData}
+																	themeId={themeId}
+																	fontSizePt={fontSizePt}
+																	pageMarginMm={pageMarginMm}
+																	sectionIcons={sectionIcons}
+																	sectionPreferences={sectionPreferences}
+																	minPageCount={previewPageCount}
+																	onSectionClick={handlePreviewSectionClick}
+																/>
+															</div>
+															{index > 0 && (
+																<div
+																	className="pointer-events-none absolute left-0 right-0 top-0 z-10 bg-white"
+																	style={{ height: `${pageMarginMm}mm` }}
+																/>
+															)}
+															<div
+																className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 bg-white"
+																style={{
+																	height: `${
+																		pageMarginMm + pageLayout.bottomBlankMm
+																	}mm`,
+																}}
+															/>
+														</div>
+													),
+												)}
+											</div>
+										</>
 									)}
 								</div>
 							</div>
@@ -1781,7 +1956,7 @@ function App() {
 						<button
 							type="button"
 							onClick={() => setRightPanelOpen(false)}
-							className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-100 hover:text-slate-700"
+							className="absolute right-3 top-3 z-10 hidden h-8 w-8 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-100 hover:text-slate-700 lg:flex"
 							title="折叠右侧面板"
 							aria-label="折叠右侧面板"
 						>

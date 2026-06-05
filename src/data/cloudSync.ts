@@ -26,6 +26,7 @@ interface GitHubGistResponse {
 
 interface GitHubSyncKeyResponse {
 	login?: string;
+	avatarUrl?: string;
 	syncKey?: string;
 	message?: string;
 }
@@ -38,6 +39,7 @@ export interface GitHubGistSyncResult {
 
 export interface GitHubSyncKey {
 	login: string;
+	avatarUrl?: string;
 	syncKey: string;
 }
 
@@ -158,7 +160,12 @@ export const getGitHubSyncKey = async (
 		throw new Error(payload.message || "无法生成 GitHub 同步密钥");
 	}
 
-	return { login: payload.login, syncKey: payload.syncKey };
+	return {
+		login: payload.login,
+		avatarUrl:
+			typeof payload.avatarUrl === "string" ? payload.avatarUrl : undefined,
+		syncKey: payload.syncKey,
+	};
 };
 
 const githubHeaders = (token: string) => ({

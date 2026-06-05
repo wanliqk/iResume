@@ -876,13 +876,13 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 							key={exp.id}
 							className={`${
 								timeline
-									? `relative border-l ${c.divider} pl-4`
+									? `print-timeline-item relative border-l ${c.divider} pl-4`
 									: ""
 							} ${spacing.item} last:mb-0`}
 						>
 							{timeline && (
 								<span
-									className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 bg-white ${c.primaryBorder}`}
+									className={`print-timeline-dot absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 bg-white ${c.primaryBorder}`}
 								/>
 							)}
 							{renderExperienceHeader(exp, compact)}
@@ -1018,15 +1018,15 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 					key={proj.id}
 					className={`${
 						timeline
-							? `relative border-l ${c.divider} pl-4`
+							? `print-timeline-item relative border-l ${c.divider} pl-4`
 							: boxed
-								? `rounded-md border ${c.divider} bg-slate-50/40 px-3 py-2.5`
+								? `print-card-item rounded-md border ${c.divider} bg-slate-50/40 px-3 py-2.5`
 								: ""
 					} ${spacing.project} last:mb-0`}
 				>
 					{timeline && (
 						<span
-							className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 bg-white ${c.primaryBorder}`}
+							className={`print-timeline-dot absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 bg-white ${c.primaryBorder}`}
 						/>
 					)}
 					{content}
