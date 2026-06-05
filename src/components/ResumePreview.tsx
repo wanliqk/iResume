@@ -16,10 +16,12 @@ import React, { forwardRef } from "react";
 import {
 	DEFAULT_RESUME_FONT_SIZE_PT,
 	DEFAULT_RESUME_PAGE_MARGIN_MM,
+	normalizeResumeSectionPreferences,
 	normalizeResumeFontSize,
 	normalizeResumePageMargin,
 	type ResumeFontSizePt,
 	type ResumePageMarginMm,
+	type ResumeSectionPreferences,
 } from "../data/resumeStyle";
 import { themes } from "../data/themes";
 import type {
@@ -41,8 +43,10 @@ interface ResumePreviewProps {
 	fontSizePt?: ResumeFontSizePt;
 	pageMarginMm?: ResumePageMarginMm;
 	sectionIcons?: SectionIconVisibility;
+	sectionPreferences?: ResumeSectionPreferences;
 	minPageCount?: number;
 	contentRef?: React.Ref<HTMLDivElement>;
+	onSectionClick?: (section: SectionKey) => void;
 }
 
 interface BannerLinkProps {
@@ -134,8 +138,10 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 			fontSizePt,
 			pageMarginMm,
 			sectionIcons,
+			sectionPreferences: sectionPreferencesInput,
 			minPageCount = 1,
 			contentRef,
+			onSectionClick,
 		},
 		ref,
 	) {
@@ -151,6 +157,9 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 		const experienceStyle = theme.experienceStyle ?? "plain";
 		const projectStyle = theme.projectStyle ?? "plain";
 		const tagStyle = theme.tagStyle ?? "soft";
+		const sectionPreferences = normalizeResumeSectionPreferences(
+			sectionPreferencesInput,
+		);
 		const minHeightMm = Math.max(1, minPageCount) * A4_HEIGHT_MM;
 
 		const previewStyle = {
@@ -188,8 +197,49 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 
 		const visibleOrder = data.sectionOrder.filter((key) => sectionVisible[key]);
 
-		const getSectionClass = (isLast: boolean) =>
-			isLast ? "" : spacing.section;
+		const shouldIgnoreSectionClick = (
+			event: React.MouseEvent<HTMLElement>,
+		) => {
+			if (!onSectionClick || event.defaultPrevented || event.button !== 0) {
+				return true;
+			}
+
+			if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+				return true;
+			}
+
+			if (
+				event.target instanceof HTMLElement &&
+				event.target.closest(
+					'a, button, input, textarea, select, [contenteditable="true"]',
+				)
+			) {
+				return true;
+			}
+
+			return Boolean(window.getSelection()?.toString().trim());
+		};
+
+		const getSectionProps = (
+			key: SectionKey,
+			isLast: boolean,
+		): React.HTMLAttributes<HTMLElement> & {
+			"data-preview-section"?: SectionKey;
+		} => ({
+			className: `${isLast ? "" : spacing.section} ${
+				onSectionClick ? "resume-editable-section" : ""
+			}`.trim(),
+			...(onSectionClick
+				? {
+						"data-preview-section": key,
+						title: `点击编辑${data.sectionTitles[key]}`,
+						onClick: (event) => {
+							if (shouldIgnoreSectionClick(event)) return;
+							onSectionClick(key);
+						},
+					}
+				: {}),
+		});
 
 		const renderSectionTitle = (key: SectionKey) => {
 			const title = data.sectionTitles[key];
@@ -631,17 +681,22 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 		};
 
 		const renderSkillContent = (skill: SkillItem) => {
-			if (skillLayout !== "chips") return parseInline(skill.content);
+			const useChips =
+				sectionPreferences.skills.contentStyle === "chips" ||
+				(sectionPreferences.skills.contentStyle === "theme" &&
+					skillLayout === "chips");
+
+			if (!useChips) return parseInline(skill.content);
 
 			const parts = splitSkillContent(skill.content);
 			if (parts.length <= 1) return parseInline(skill.content);
 
 			return (
-				<span className="inline-flex flex-wrap gap-1.5 align-top">
+				<span className="inline-flex flex-wrap gap-x-1.5 gap-y-1 align-top">
 					{parts.map((part) => (
 						<span
 							key={part}
-							className={`rounded border ${c.tagBorder} ${c.tagBg} px-1.5 py-0.5 text-xs ${c.tagText}`}
+							className={`rounded-sm border border-current/15 bg-transparent px-1.5 py-[1px] text-[11px] leading-5 ${c.tagText}`}
 						>
 							{parseInline(part)}
 						</span>
@@ -652,10 +707,33 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 
 		const renderSkills = (isLast: boolean) => {
 			const visibleSkills = data.skills.filter(hasSkillContent);
+			const showSkillLabels = sectionPreferences.skills.showLabels;
+
+			if (!showSkillLabels) {
+				return (
+					<section key="skills" {...getSectionProps("skills", isLast)}>
+						{renderSectionHeader("skills")}
+						<div
+							className={`text-sm ${
+								skillLayout === "columns" ? "grid grid-cols-2 gap-x-5" : ""
+							}`}
+						>
+							{visibleSkills.map((skill) => (
+								<div
+									key={skill.id}
+									className={`print-skill-row min-w-0 ${spacing.skillRow} last:mb-0`}
+								>
+									<span className={c.body}>{renderSkillContent(skill)}</span>
+								</div>
+							))}
+						</div>
+					</section>
+				);
+			}
 
 			if (skillLayout === "columns") {
 				return (
-					<section key="skills" className={getSectionClass(isLast)}>
+					<section key="skills" {...getSectionProps("skills", isLast)}>
 						{renderSectionHeader("skills")}
 						<div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
 							{visibleSkills.map((skill) => (
@@ -663,7 +741,7 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 									<div className={`font-semibold ${c.heading}`}>
 										{skill.label}
 									</div>
-									<div className={c.body}>{parseInline(skill.content)}</div>
+									<div className={c.body}>{renderSkillContent(skill)}</div>
 								</div>
 							))}
 						</div>
@@ -673,7 +751,7 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 
 			if (skillLayout === "inline") {
 				return (
-					<section key="skills" className={getSectionClass(isLast)}>
+					<section key="skills" {...getSectionProps("skills", isLast)}>
 						{renderSectionHeader("skills")}
 						<div className="text-sm">
 							{visibleSkills.map((skill) => (
@@ -684,7 +762,7 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 									<span className={`font-semibold ${c.heading}`}>
 										{skill.label}
 									</span>
-									<span className={c.body}>{parseInline(skill.content)}</span>
+									<span className={c.body}>{renderSkillContent(skill)}</span>
 								</div>
 							))}
 						</div>
@@ -693,7 +771,7 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 			}
 
 			return (
-				<section key="skills" className={getSectionClass(isLast)}>
+				<section key="skills" {...getSectionProps("skills", isLast)}>
 					{renderSectionHeader("skills")}
 					<div className="text-sm">
 						{visibleSkills.map((skill) => (
@@ -713,25 +791,39 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 		};
 
 		const renderExperienceHeader = (exp: Experience, compact = false) => {
+			const role = sectionPreferences.experience.showRole
+				? exp.role.trim()
+				: "";
+			const date = sectionPreferences.experience.showDates
+				? exp.date.trim()
+				: "";
+			const dateOnRight =
+				date && sectionPreferences.experience.datePosition === "right";
+			const dateBelow =
+				date && sectionPreferences.experience.datePosition === "below";
+
 			if (compact) {
 				return (
 					<div className="print-item-header mb-1">
 						<div className="flex justify-between items-baseline gap-4">
 							<h3 className={`font-bold text-base ${c.heading}`}>
 								{exp.company}
-								{exp.role.trim() && (
+								{role && (
 									<span className={`font-medium ${c.primary}`}>
 										{" "}
-										· {exp.role}
+										· {role}
 									</span>
 								)}
 							</h3>
-							{exp.date.trim() && (
+							{dateOnRight && (
 								<span className={`text-sm ${c.muted} shrink-0`}>
-									{exp.date}
+									{date}
 								</span>
 							)}
 						</div>
+						{dateBelow && (
+							<div className={`mt-1 text-xs ${c.muted}`}>{date}</div>
+						)}
 					</div>
 				);
 			}
@@ -742,15 +834,21 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 						<h3 className={`font-bold text-base ${c.heading}`}>
 							{exp.company}
 						</h3>
-						{exp.date.trim() && (
+						{dateOnRight && (
 							<span className={`text-sm ${c.muted} shrink-0`}>
-								{exp.date}
+								{date}
 							</span>
 						)}
 					</div>
-					{exp.role.trim() && (
-						<div className={`text-sm font-medium ${c.primary} mb-2`}>
-							{exp.role}
+					{(role || dateBelow) && (
+						<div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+							{role && (
+								<span className={`font-medium ${c.primary}`}>{role}</span>
+							)}
+							{role && dateBelow && (
+								<span className={`${c.muted} opacity-40`}>·</span>
+							)}
+							{dateBelow && <span className={c.muted}>{date}</span>}
 						</div>
 					)}
 				</div>
@@ -767,7 +865,7 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 			) : null;
 
 		const renderExperience = (isLast: boolean) => (
-			<section key="experience" className={getSectionClass(isLast)}>
+			<section key="experience" {...getSectionProps("experience", isLast)}>
 				{renderSectionHeader("experience")}
 				{data.experience.map((exp) => {
 					const compact = experienceStyle === "compact";
@@ -797,7 +895,7 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 
 		const renderProjectTag = (tags: string) => {
 			const text = tags.trim();
-			if (!text) return null;
+			if (!sectionPreferences.projects.showTags || !text) return null;
 
 			if (tagStyle === "plain") {
 				return <span className={`text-xs ${c.muted}`}>{text}</span>;
@@ -817,11 +915,12 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 		const renderProjectLinks = (
 			demoHref: string | undefined,
 			sourceHref: string | undefined,
+			className = "flex gap-3 text-xs",
 		) => {
 			if (!demoHref && !sourceHref) return null;
 
 			return (
-				<div className="flex gap-3 text-xs">
+				<div className={className}>
 					{demoHref && (
 						<a
 							href={demoHref}
@@ -851,20 +950,56 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 			const sourceHref = normalizeSafeUrl(proj.source);
 			const boxed = projectStyle === "boxed";
 			const compact = projectStyle === "compact";
-
-			return (
-				<div
-					key={proj.id}
-					className={`${boxed ? `rounded-md border ${c.divider} bg-slate-50/40 px-3 py-2.5` : ""} ${spacing.project} last:mb-0`}
-				>
-					<div className="print-item-header flex justify-between items-center gap-3 mb-1">
-						<div className="flex min-w-0 items-center gap-2">
-							<h3 className={`font-bold text-base ${c.heading}`}>
-								{proj.name}
-							</h3>
-							{renderProjectTag(proj.tags)}
+			const timeline = projectStyle === "timeline";
+			const date = sectionPreferences.projects.showDates
+				? proj.date.trim()
+				: "";
+			const dateOnRight =
+				date && sectionPreferences.projects.datePosition === "right";
+			const dateBelow =
+				date && sectionPreferences.projects.datePosition === "below";
+			const tagOnTitle =
+				sectionPreferences.projects.tagPosition === "title"
+					? renderProjectTag(proj.tags)
+					: null;
+			const tagBelow =
+				sectionPreferences.projects.tagPosition === "below"
+					? renderProjectTag(proj.tags)
+					: null;
+			const linksOnTitle =
+				sectionPreferences.projects.linksPosition === "title"
+					? renderProjectLinks(demoHref, sourceHref, "flex gap-3 text-xs")
+					: null;
+			const linksBelow =
+				sectionPreferences.projects.linksPosition === "below"
+					? renderProjectLinks(demoHref, sourceHref)
+					: null;
+			const content = (
+				<>
+					<div className="print-item-header mb-1">
+						<div className="flex items-baseline justify-between gap-4">
+							<div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+								<h3 className={`font-bold text-base ${c.heading}`}>
+									{proj.name}
+								</h3>
+								{tagOnTitle}
+								{linksOnTitle}
+							</div>
+							{dateOnRight && (
+								<div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
+									<span className={`text-sm ${c.muted}`}>{date}</span>
+								</div>
+							)}
 						</div>
-						{renderProjectLinks(demoHref, sourceHref)}
+						{(dateBelow || tagBelow || linksBelow) && (
+							<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+								{dateBelow && (
+									<span className={`text-xs ${c.muted}`}>{date}</span>
+								)}
+								{tagBelow}
+								{linksBelow}
+							</div>
+						)}
 					</div>
 					{proj.description.trim() && (
 						<ul
@@ -875,19 +1010,39 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 							{renderMarkdownList(proj.description)}
 						</ul>
 					)}
+				</>
+			);
+
+			return (
+				<div
+					key={proj.id}
+					className={`${
+						timeline
+							? `relative border-l ${c.divider} pl-4`
+							: boxed
+								? `rounded-md border ${c.divider} bg-slate-50/40 px-3 py-2.5`
+								: ""
+					} ${spacing.project} last:mb-0`}
+				>
+					{timeline && (
+						<span
+							className={`absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 bg-white ${c.primaryBorder}`}
+						/>
+					)}
+					{content}
 				</div>
 			);
 		};
 
 		const renderProjects = (isLast: boolean) => (
-			<section key="projects" className={getSectionClass(isLast)}>
+			<section key="projects" {...getSectionProps("projects", isLast)}>
 				{renderSectionHeader("projects")}
 				{data.projects.map(renderProject)}
 			</section>
 		);
 
 		const renderEducation = (isLast: boolean) => (
-			<section key="education" className={getSectionClass(isLast)}>
+			<section key="education" {...getSectionProps("education", isLast)}>
 				{renderSectionHeader("education")}
 				{data.education.map((edu: Education) => (
 					<div
@@ -905,20 +1060,42 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 								<span className={c.body}>{edu.school}</span>
 							)}
 						</div>
-						{edu.date.trim() && <span className={c.muted}>{edu.date}</span>}
+						{sectionPreferences.education.showDates && edu.date.trim() && (
+							<span className={c.muted}>{edu.date}</span>
+						)}
 					</div>
 				))}
 			</section>
 		);
 
+		const renderOtherLines = () =>
+			data.other
+				.split("\n")
+				.filter((line) => line.trim())
+				.map((line, index) => {
+					const content = line.replace(/^-\s*/, "");
+					return (
+						<div
+							key={`${index}-${line.slice(0, 20)}`}
+							className={`${spacing.skillRow} last:mb-0`}
+						>
+							{parseInline(content)}
+						</div>
+					);
+				});
+
 		const renderOther = (isLast: boolean) => (
-			<section key="other" className={getSectionClass(isLast)}>
+			<section key="other" {...getSectionProps("other", isLast)}>
 				{renderSectionHeader("other")}
-				<ul
-					className={`list-disc list-outside ml-4 ${spacing.list} text-sm ${c.body}`}
-				>
-					{renderMarkdownList(data.other)}
-				</ul>
+				{sectionPreferences.other.listStyle === "plain" ? (
+					<div className={`text-sm ${c.body}`}>{renderOtherLines()}</div>
+				) : (
+					<ul
+						className={`list-disc list-outside ml-4 ${spacing.list} text-sm ${c.body}`}
+					>
+						{renderMarkdownList(data.other)}
+					</ul>
+				)}
 			</section>
 		);
 

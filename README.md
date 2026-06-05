@@ -12,6 +12,7 @@ https://resume.dogxi.me
 - **简历管理**：本地管理多份简历，支持新建空白简历、命名、标签、版本号和上次修改时间
 - **本地存储**：自动保存到浏览器 LocalStorage，刷新不丢失
 - **一键导出**：优化的打印样式，支持保存为 PDF 或导出 PNG 图片
+- **GitHub 云同步**：可通过 GitHub OAuth 同步加密后的本地数据
 - **样式设置**：支持主题切换、主题收藏、字号、页边距和区块标题图标开关，JSON 备份会保留外观设置
 - **分页预览**：预览区显示预计页数与分页线，方便提前控制一页简历
 - **专业设计**：符合 ATS（应聘者跟踪系统）的简洁排版
@@ -109,6 +110,22 @@ bun preview
 
 点击右上角的 **"图片"** 按钮可以将当前简历导出为 PNG 图片，适合快速预览、投递前沟通或移动端查看。
 
+### 云同步
+
+首页右上角「设置」里的「云同步」支持通过 GitHub 同步所有本地简历数据。首次使用时点击连接 GitHub 后即可上传；在新设备上登录同一个 GitHub 账号后，点击从云端恢复即可取回数据。
+
+同步内容会在浏览器内用 GitHub 账号级密钥加密后再写入 gist。云端 gist 里不会保存明文简历内容。
+
+部署 OAuth 同步需要创建 GitHub OAuth App，并在 Vercel 环境变量中配置：
+
+```bash
+VITE_GITHUB_OAUTH_CLIENT_ID=你的 GitHub OAuth App Client ID
+GITHUB_OAUTH_CLIENT_ID=你的 GitHub OAuth App Client ID
+GITHUB_OAUTH_CLIENT_SECRET=你的 GitHub OAuth App Client Secret
+```
+
+GitHub OAuth App 的 Authorization callback URL 设置为应用访问地址，例如 `https://resume.example.com/`。本地开发时可增加 `http://localhost:5173/` 用于调试。
+
 ### 重置数据
 
 点击 **"重置"** 按钮可以恢复到默认模版数据（会弹出确认对话框）。
@@ -142,7 +159,7 @@ bun preview
 
 ### Q: 数据存储在哪里？
 
-A: 所有数据存储在浏览器的 LocalStorage 中，不会上传到任何服务器。清除浏览器数据会导致简历内容丢失，建议定期导出 PDF 备份。
+A: 默认存储在浏览器的 LocalStorage 中。开启 GitHub 云同步后，数据会先在浏览器内加密，再保存到你的 GitHub 账号下。
 
 ### Q: 支持多语言吗？
 

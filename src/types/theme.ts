@@ -89,7 +89,8 @@ export type EntryStyle =
 export type ProjectStyle =
 	| "plain" // 默认
 	| "compact" // 一页优先
-	| "boxed"; // 轻边框强调
+	| "boxed" // 轻边框强调
+	| "timeline"; // 左侧时间线
 
 // 标签风格
 export type TagStyle =

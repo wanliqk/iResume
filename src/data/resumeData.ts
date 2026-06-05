@@ -169,6 +169,7 @@ function normalizeProjects(value: unknown): Project[] {
 		return {
 			id: readId(raw.id, index + 1, usedIds),
 			name: readString(raw.name),
+			date: readString(raw.date),
 			tags: readString(raw.tags),
 			link: readString(raw.link),
 			source: readString(raw.source),
@@ -189,28 +190,6 @@ export function normalizeResumeData(raw: unknown): ResumeData {
 		projects: normalizeProjects(data.projects),
 		education: normalizeEducation(data.education),
 		other: readString(data.other, initialResumeState.other),
-	};
-}
-
-export function createBlankResumeData(): ResumeData {
-	return {
-		personal: {
-			name: "",
-			title: "",
-			phone: "",
-			email: "",
-			location: "",
-			availability: "",
-			github: "",
-			website: "",
-		},
-		sectionTitles: { ...initialResumeState.sectionTitles },
-		sectionOrder: [...initialResumeState.sectionOrder],
-		skills: [],
-		experience: [],
-		projects: [],
-		education: [],
-		other: "",
 	};
 }
 

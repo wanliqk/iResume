@@ -113,6 +113,9 @@ body.resume-space-panning {
 	.print\:p-0 {
 		padding: 0 !important;
 	}
+	.print\:pb-0 {
+		padding-bottom: 0 !important;
+	}
 	.print\:bg-white {
 		background: white !important;
 	}
@@ -128,6 +131,8 @@ body.resume-space-panning {
 
 	.resume-preview-scale {
 		transform: none !important;
+		width: auto !important;
+		min-height: 0 !important;
 	}
 
 	.print\:shadow-none {
@@ -219,6 +224,20 @@ body.resume-space-panning {
 .resume-banner-inner {
 	padding: calc(var(--resume-page-margin) * 0.65) var(--resume-page-margin)
 		calc(var(--resume-page-margin) * 0.6);
+}
+
+@media screen {
+	.resume-editable-section {
+		border-radius: 2px;
+		cursor: text;
+		outline: 1px solid transparent;
+		outline-offset: 5px;
+		transition: outline-color 120ms ease;
+	}
+
+	.resume-editable-section:hover {
+		outline-color: rgb(59 130 246 / 18%);
+	}
 }
 
 .resume-content[data-font-scaled="true"] {

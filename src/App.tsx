@@ -26,6 +26,7 @@ import FontSizeControl from "./components/FontSizeControl";
 import PageMarginControl from "./components/PageMarginControl";
 import PreviewZoomControl from "./components/PreviewZoomControl";
 import ResumeEditor from "./components/ResumeEditor";
+import ResumeDisplayPreferencesEditor from "./components/ResumeDisplayPreferencesEditor";
 import ResumeManager from "./components/ResumeManager";
 import ResumePreview from "./components/ResumePreview";
 import ThemePicker from "./components/ThemePicker";
@@ -33,6 +34,15 @@ import {
 	createResumeBackup,
 	normalizeResumeBackup,
 } from "./data/resumeBackup";
+import {
+	createGitHubSyncGist,
+	decryptCloudSyncData,
+	encryptCloudSyncData,
+	findGitHubSyncGist,
+	getGitHubSyncKey,
+	readGitHubSyncGist,
+	updateGitHubSyncGist,
+} from "./data/cloudSync";
 import {
 	normalizeResumeData,
 	normalizeSectionIconVisibility,
@@ -55,12 +65,14 @@ import {
 	type PreviewZoom,
 } from "./data/previewZoom";
 import {
+	DEFAULT_SECTION_PREFERENCES,
 	DEFAULT_RESUME_FONT_SIZE_PT,
 	DEFAULT_RESUME_PAGE_MARGIN_MM,
 	normalizeResumeFontSize,
 	normalizeResumePageMargin,
 	type ResumeFontSizePt,
 	type ResumePageMarginMm,
+	type ResumeSectionPreferences,
 } from "./data/resumeStyle";
 import {
 	DEFAULT_THEME_ID,
@@ -81,13 +93,153 @@ const SECTION_ICONS_UNIFIED_MIGRATION_KEY = "resume-section-icons-unified-v2";
 const FAVORITE_THEMES_STORAGE_KEY = "resume-favorite-themes";
 const LIBRARY_STORAGE_KEY = "resume-library";
 const PREVIEW_ZOOM_STORAGE_KEY = "resume-preview-zoom";
+const APP_VIEW_STORAGE_KEY = "resume-app-view";
+const CLOUD_SYNC_AUTH_STORAGE_KEY = "resume-cloud-sync-auth";
+const CLOUD_SYNC_SETTINGS_STORAGE_KEY = "resume-cloud-sync-settings";
+const CLOUD_SYNC_OAUTH_STATE_STORAGE_KEY = "resume-cloud-sync-oauth-state";
 const A4_HEIGHT_MM = 297;
 const A4_WIDTH_MM = 210;
+
+type CloudSyncStatus = "idle" | "connecting" | "uploading" | "downloading";
+
+interface UserDataBackup {
+	version: 1;
+	exportedAt: string;
+	library: ResumeLibrary;
+	favoriteThemeIds: ThemeId[];
+	previewZoom: PreviewZoom;
+}
+
+interface CloudSyncAuth {
+	accessToken: string;
+	syncKey: string;
+	tokenType?: string;
+	scope?: string;
+	login?: string;
+	connectedAt: string;
+}
+
+interface CloudSyncSettings {
+	gistId: string;
+	lastSyncedAt?: string;
+	lastDirection?: "push" | "pull";
+}
 
 const getPrintablePageHeightMm = (pageMarginMm: ResumePageMarginMm) =>
 	A4_HEIGHT_MM - pageMarginMm * 2;
 
 type AppView = "manager" | "editor";
+
+const readInitialView = (library: ResumeLibrary): AppView =>
+	localStorage.getItem(APP_VIEW_STORAGE_KEY) === "editor" &&
+	library.documents.length > 0
+		? "editor"
+		: "manager";
+
+const getPrintTitleName = (document: ResumeDocument, data: ResumeData) => {
+	const sanitize = (value: string) =>
+		value
+			.replace(/[\\/:*?"<>|]+/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
+
+	return (
+		sanitize(document.name) ||
+		sanitize(data.personal.name) ||
+		"简历"
+	);
+};
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+	typeof value === "object" && value !== null && !Array.isArray(value);
+
+const readFileAsText = (file: File) =>
+	new Promise<string>((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = (event) => resolve(String(event.target?.result ?? ""));
+		reader.onerror = () => reject(new Error("无法读取文件"));
+		reader.readAsText(file);
+	});
+
+const readCloudSyncAuth = (): CloudSyncAuth | null => {
+	const saved = localStorage.getItem(CLOUD_SYNC_AUTH_STORAGE_KEY);
+	if (!saved) return null;
+
+	try {
+		const value = JSON.parse(saved) as unknown;
+		if (!isPlainObject(value) || typeof value.accessToken !== "string") {
+			return null;
+		}
+		if (typeof value.syncKey !== "string") return null;
+
+		return {
+			accessToken: value.accessToken,
+			syncKey: value.syncKey,
+			tokenType:
+				typeof value.tokenType === "string" ? value.tokenType : undefined,
+			scope: typeof value.scope === "string" ? value.scope : undefined,
+			login: typeof value.login === "string" ? value.login : undefined,
+			connectedAt:
+				typeof value.connectedAt === "string"
+					? value.connectedAt
+					: new Date().toISOString(),
+		};
+	} catch {
+		return null;
+	}
+};
+
+const readCloudSyncSettings = (): CloudSyncSettings => {
+	const saved = localStorage.getItem(CLOUD_SYNC_SETTINGS_STORAGE_KEY);
+	if (!saved) return { gistId: "" };
+
+	try {
+		const value = JSON.parse(saved) as unknown;
+		if (!isPlainObject(value)) return { gistId: "" };
+
+		return {
+			gistId: typeof value.gistId === "string" ? value.gistId : "",
+			lastSyncedAt:
+				typeof value.lastSyncedAt === "string"
+					? value.lastSyncedAt
+					: undefined,
+			lastDirection:
+				value.lastDirection === "push" || value.lastDirection === "pull"
+					? value.lastDirection
+					: undefined,
+		};
+	} catch {
+		return { gistId: "" };
+	}
+};
+
+const getOAuthRedirectUri = () =>
+	`${window.location.origin}${window.location.pathname}`;
+
+const exchangeGitHubOAuthCode = async (
+	code: string,
+	redirectUri: string,
+): Promise<Pick<CloudSyncAuth, "accessToken" | "scope" | "tokenType">> => {
+	const response = await fetch("/api/github/oauth", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ code, redirectUri }),
+	});
+	const payload = (await response.json()) as Record<string, unknown>;
+
+	if (!response.ok || typeof payload.accessToken !== "string") {
+		throw new Error(
+			typeof payload.message === "string" ? payload.message : "GitHub 登录失败",
+		);
+	}
+
+	return {
+		accessToken: payload.accessToken,
+		scope: typeof payload.scope === "string" ? payload.scope : undefined,
+		tokenType:
+			typeof payload.tokenType === "string" ? payload.tokenType : undefined,
+	};
+};
 
 interface ResumeMetaEditorProps {
 	document: ResumeDocument;
@@ -306,8 +458,19 @@ function App() {
 		scrollLeft: number;
 		scrollTop: number;
 	} | null>(null);
-	const [view, setView] = useState<AppView>("manager");
+	const canvasShortcutsActiveRef = useRef(false);
+	const isSpacePanningRef = useRef(false);
+	const isPanningRef = useRef(false);
 	const [library, setLibrary] = useState<ResumeLibrary>(readInitialLibrary);
+	const [view, setView] = useState<AppView>(() => readInitialView(library));
+	const [cloudSyncAuth, setCloudSyncAuth] = useState<CloudSyncAuth | null>(
+		readCloudSyncAuth,
+	);
+	const [cloudSyncSettings, setCloudSyncSettings] =
+		useState<CloudSyncSettings>(readCloudSyncSettings);
+	const [cloudSyncStatus, setCloudSyncStatus] =
+		useState<CloudSyncStatus>("idle");
+	const [cloudSyncMessage, setCloudSyncMessage] = useState<string | null>(null);
 	const [importError, setImportError] = useState<string | null>(null);
 	const [imageExportStatus, setImageExportStatus] = useState<
 		"idle" | "exporting" | "error"
@@ -335,11 +498,35 @@ function App() {
 		fontSizePt,
 		pageMarginMm,
 		sectionIcons,
+		sectionPreferences,
 	} = activeDocument.appearance;
 
 	useEffect(() => {
 		localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(library));
 	}, [library]);
+
+	useEffect(() => {
+		localStorage.setItem(APP_VIEW_STORAGE_KEY, view);
+	}, [view]);
+
+	useEffect(() => {
+		if (cloudSyncAuth) {
+			localStorage.setItem(
+				CLOUD_SYNC_AUTH_STORAGE_KEY,
+				JSON.stringify(cloudSyncAuth),
+			);
+			return;
+		}
+
+		localStorage.removeItem(CLOUD_SYNC_AUTH_STORAGE_KEY);
+	}, [cloudSyncAuth]);
+
+	useEffect(() => {
+		localStorage.setItem(
+			CLOUD_SYNC_SETTINGS_STORAGE_KEY,
+			JSON.stringify(cloudSyncSettings),
+		);
+	}, [cloudSyncSettings]);
 
 	useEffect(() => {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(resumeData));
@@ -372,6 +559,69 @@ function App() {
 	}, [previewZoom]);
 
 	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		const code = params.get("code");
+		const state = params.get("state");
+		if (!code || !state) return;
+
+		const savedState = sessionStorage.getItem(
+			CLOUD_SYNC_OAUTH_STATE_STORAGE_KEY,
+		);
+		const redirectUri = getOAuthRedirectUri();
+
+		const cleanupUrl = () => {
+			params.delete("code");
+			params.delete("state");
+			const nextSearch = params.toString();
+			window.history.replaceState(
+				null,
+				"",
+				`${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`,
+			);
+		};
+
+		if (!savedState || savedState !== state) {
+			setCloudSyncMessage("GitHub 登录状态校验失败，请重新连接");
+			cleanupUrl();
+			return;
+		}
+
+		let canceled = false;
+		sessionStorage.removeItem(CLOUD_SYNC_OAUTH_STATE_STORAGE_KEY);
+		setCloudSyncStatus("connecting");
+		setCloudSyncMessage("正在连接 GitHub...");
+
+		exchangeGitHubOAuthCode(code, redirectUri)
+			.then(async (token) => {
+				const syncKey = await getGitHubSyncKey(token.accessToken);
+				if (canceled) return;
+				setCloudSyncAuth({
+					...token,
+					login: syncKey.login,
+					syncKey: syncKey.syncKey,
+					connectedAt: new Date().toISOString(),
+				});
+				setCloudSyncMessage(`已连接 GitHub：${syncKey.login}`);
+			})
+			.catch((error: unknown) => {
+				if (canceled) return;
+				console.error("GitHub OAuth failed", error);
+				setCloudSyncMessage(
+					error instanceof Error ? error.message : "GitHub 登录失败",
+				);
+			})
+			.finally(() => {
+				if (canceled) return;
+				setCloudSyncStatus("idle");
+				cleanupUrl();
+			});
+
+		return () => {
+			canceled = true;
+		};
+	}, []);
+
+	useEffect(() => {
 		if (view !== "editor") return;
 
 		const frame = requestAnimationFrame(() => {
@@ -399,6 +649,18 @@ function App() {
 			setAppearancePanelOpen(false);
 		}
 	}, [view]);
+
+	useEffect(() => {
+		canvasShortcutsActiveRef.current = canvasShortcutsActive;
+	}, [canvasShortcutsActive]);
+
+	useEffect(() => {
+		isSpacePanningRef.current = isSpacePanning;
+	}, [isSpacePanning]);
+
+	useEffect(() => {
+		isPanningRef.current = isPanning;
+	}, [isPanning]);
 
 	useEffect(() => {
 		if (!appearancePanelOpen) return;
@@ -431,18 +693,19 @@ function App() {
 		};
 
 		const canUseCanvasShortcuts = (target: EventTarget | null) =>
-			canvasShortcutsActive &&
+			canvasShortcutsActiveRef.current &&
 			!isInteractiveTarget(target) &&
 			!isWorkbenchChromeTarget(target);
 
 		const canUseWheelZoom = (target: EventTarget | null) =>
-			canvasShortcutsActive && !isWorkbenchChromeTarget(target);
+			canvasShortcutsActiveRef.current && !isWorkbenchChromeTarget(target);
 
 		const blurCanvasShortcuts = (event: Event) => {
 			if (
 				isWorkbenchChromeTarget(event.target) ||
 				isInteractiveTarget(event.target)
 			) {
+				canvasShortcutsActiveRef.current = false;
 				setCanvasShortcutsActive(false);
 			}
 		};
@@ -460,6 +723,8 @@ function App() {
 
 		const releaseHand = () => {
 			panStateRef.current = null;
+			isPanningRef.current = false;
+			isSpacePanningRef.current = false;
 			setIsPanning(false);
 			setIsSpacePanning(false);
 			syncSpacePanningClass(false);
@@ -471,8 +736,11 @@ function App() {
 			if (isSpaceKey(event)) {
 				event.preventDefault();
 				event.stopPropagation();
-				if (!event.repeat) setIsSpacePanning(true);
-				if (!event.repeat) syncSpacePanningClass(true);
+				if (!event.repeat) {
+					isSpacePanningRef.current = true;
+					setIsSpacePanning(true);
+					syncSpacePanningClass(true);
+				}
 				return;
 			}
 
@@ -499,10 +767,12 @@ function App() {
 
 		const handleKeyUp = (event: KeyboardEvent) => {
 			if (!isSpaceKey(event)) return;
-			if (!isSpacePanning && !isPanning) return;
+			if (!isSpacePanningRef.current && !isPanningRef.current) return;
 			event.preventDefault();
 			event.stopPropagation();
 			panStateRef.current = null;
+			isPanningRef.current = false;
+			isSpacePanningRef.current = false;
 			setIsPanning(false);
 			setIsSpacePanning(false);
 			syncSpacePanningClass(false);
@@ -550,7 +820,7 @@ function App() {
 			window.removeEventListener("wheel", handleWheel, true);
 			releaseHand();
 		};
-	}, [canvasShortcutsActive, isPanning, isSpacePanning, view]);
+	}, [view]);
 
 	const handleToggleFavoriteTheme = (id: ThemeId) => {
 		setFavoriteThemeIds((current) =>
@@ -558,6 +828,187 @@ function App() {
 				? current.filter((item) => item !== id)
 				: [id, ...current],
 		);
+	};
+
+	const createUserDataBackup = useCallback(
+		(): UserDataBackup => ({
+			version: 1,
+			exportedAt: new Date().toISOString(),
+			library,
+			favoriteThemeIds,
+			previewZoom,
+		}),
+		[favoriteThemeIds, library, previewZoom],
+	);
+
+	const applyUserDataBackup = useCallback((parsed: unknown): string | null => {
+		const rawLibrary =
+			isPlainObject(parsed) && "library" in parsed ? parsed.library : parsed;
+		if (!isPlainObject(rawLibrary) || !Array.isArray(rawLibrary.documents)) {
+			return "未找到有效的简历库数据";
+		}
+
+		const nextLibrary = migrateUnifiedSectionIcons(
+			normalizeResumeLibrary(rawLibrary, readLegacyResumeDocument()),
+		);
+
+		if (isPlainObject(parsed)) {
+			if ("favoriteThemeIds" in parsed) {
+				setFavoriteThemeIds(normalizeThemeIdList(parsed.favoriteThemeIds));
+			}
+			if (parsed.previewZoom !== undefined) {
+				setPreviewZoom(normalizePreviewZoom(parsed.previewZoom));
+			}
+		}
+
+		setLibrary(nextLibrary);
+		setView("manager");
+		return null;
+	}, []);
+
+	const handleExportUserData = () => {
+		const backup = createUserDataBackup();
+		const json = JSON.stringify(backup, null, 2);
+		const blob = new Blob([json], { type: "application/json" });
+		const url = URL.createObjectURL(blob);
+		const date = new Date().toISOString().slice(0, 10);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `iresume-user-data-${date}.json`;
+		a.click();
+		URL.revokeObjectURL(url);
+	};
+
+	const handleImportUserData = async (file: File): Promise<string | null> => {
+		if (!file.name.endsWith(".json")) return "请选择 .json 文件";
+
+		try {
+			const text = await readFileAsText(file);
+			const parsed = JSON.parse(text) as unknown;
+			return applyUserDataBackup(parsed);
+		} catch (error) {
+			console.error("Failed to import user data", error);
+			return "导入失败，请检查文件内容";
+		}
+	};
+
+	const handleCloudConnect = () => {
+		const clientId = import.meta.env.VITE_GITHUB_OAUTH_CLIENT_ID;
+		if (!clientId) {
+			setCloudSyncMessage("需要配置 VITE_GITHUB_OAUTH_CLIENT_ID");
+			return;
+		}
+
+		const state =
+			typeof crypto.randomUUID === "function"
+				? crypto.randomUUID()
+				: `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+		sessionStorage.setItem(CLOUD_SYNC_OAUTH_STATE_STORAGE_KEY, state);
+
+		const url = new URL("https://github.com/login/oauth/authorize");
+		url.searchParams.set("client_id", clientId);
+		url.searchParams.set("redirect_uri", getOAuthRedirectUri());
+		url.searchParams.set("scope", "gist");
+		url.searchParams.set("state", state);
+		url.searchParams.set("allow_signup", "true");
+		window.location.assign(url.toString());
+	};
+
+	const handleCloudDisconnect = () => {
+		setCloudSyncAuth(null);
+		setCloudSyncMessage("已断开 GitHub，本地数据不受影响");
+	};
+
+	const handleCloudGistIdChange = (gistId: string) => {
+		setCloudSyncSettings((current) => ({ ...current, gistId: gistId.trim() }));
+	};
+
+	const handleCloudPush = async () => {
+		if (!cloudSyncAuth) {
+			setCloudSyncMessage("请先连接 GitHub");
+			return;
+		}
+
+		setCloudSyncStatus("uploading");
+		setCloudSyncMessage("正在加密并上传到 GitHub Gist...");
+
+		try {
+			const content = await encryptCloudSyncData(
+				createUserDataBackup(),
+				cloudSyncAuth.syncKey,
+			);
+			const gistId = cloudSyncSettings.gistId.trim();
+			const result = gistId
+				? await updateGitHubSyncGist(
+						cloudSyncAuth.accessToken,
+						gistId,
+						content,
+					)
+				: await createGitHubSyncGist(cloudSyncAuth.accessToken, content);
+			const syncedAt = result.updatedAt ?? new Date().toISOString();
+
+			setCloudSyncSettings({
+				gistId: result.gistId,
+				lastSyncedAt: syncedAt,
+				lastDirection: "push",
+			});
+			setCloudSyncMessage("已上传到 GitHub Gist");
+		} catch (error) {
+			console.error("Failed to push cloud sync", error);
+			setCloudSyncMessage(
+				error instanceof Error ? error.message : "上传到云端失败",
+			);
+		} finally {
+			setCloudSyncStatus("idle");
+		}
+	};
+
+	const handleCloudPull = async () => {
+		if (!cloudSyncAuth) {
+			setCloudSyncMessage("请先连接 GitHub");
+			return;
+		}
+
+		setCloudSyncStatus("downloading");
+		setCloudSyncMessage("正在查找 GitHub Gist 同步数据...");
+
+		try {
+			const savedGistId = cloudSyncSettings.gistId.trim();
+			const syncGist = savedGistId
+				? { gistId: savedGistId }
+				: await findGitHubSyncGist(cloudSyncAuth.accessToken);
+
+			if (!syncGist) {
+				throw new Error("没有找到 iResume 同步 Gist，请先在一台设备上传");
+			}
+
+			setCloudSyncMessage("正在读取并解密 GitHub Gist...");
+			const content = await readGitHubSyncGist(
+				cloudSyncAuth.accessToken,
+				syncGist.gistId,
+			);
+			const parsed = await decryptCloudSyncData(
+				content,
+				cloudSyncAuth.syncKey,
+			);
+			const error = applyUserDataBackup(parsed);
+			if (error) throw new Error(error);
+			const syncedAt = new Date().toISOString();
+
+			setCloudSyncSettings({
+				gistId: syncGist.gistId,
+				lastSyncedAt: syncedAt,
+				lastDirection: "pull",
+			});
+			setCloudSyncMessage("已从 GitHub Gist 恢复");
+		} catch (error) {
+			console.error("Failed to pull cloud sync", error);
+			setCloudSyncMessage(
+				error instanceof Error ? error.message : "从云端恢复失败",
+			);
+		} finally {
+			setCloudSyncStatus("idle");
+		}
 	};
 
 	useEffect(() => {
@@ -614,6 +1065,7 @@ function App() {
 				sectionIcons: getDefaultSectionIconVisibility(nextThemeId),
 			},
 		}));
+		setAppearancePanelOpen(false);
 	};
 
 	const handleFontSizeChange = (nextFontSize: ResumeFontSizePt) => {
@@ -627,6 +1079,18 @@ function App() {
 		updateActiveDocument((document) => ({
 			...document,
 			appearance: { ...document.appearance, pageMarginMm: nextPageMargin },
+		}));
+	};
+
+	const handleSectionPreferencesChange = (
+		nextPreferences: ResumeSectionPreferences,
+	) => {
+		updateActiveDocument((document) => ({
+			...document,
+			appearance: {
+				...document.appearance,
+				sectionPreferences: nextPreferences,
+			},
 		}));
 	};
 
@@ -647,8 +1111,9 @@ function App() {
 	) => {
 		event.currentTarget.focus({ preventScroll: true });
 		setCanvasShortcutsActive(true);
+		canvasShortcutsActiveRef.current = true;
 		setAppearancePanelOpen(false);
-		if (!isSpacePanning || event.button !== 0) return;
+		if (!isSpacePanningRef.current || event.button !== 0) return;
 		const node = canvasScrollRef.current;
 		if (!node) return;
 
@@ -660,6 +1125,7 @@ function App() {
 			scrollLeft: node.scrollLeft,
 			scrollTop: node.scrollTop,
 		};
+		isPanningRef.current = true;
 		setIsPanning(true);
 		event.currentTarget.setPointerCapture(event.pointerId);
 	};
@@ -679,17 +1145,24 @@ function App() {
 	const stopCanvasPan = (event: ReactPointerEvent<HTMLDivElement>) => {
 		if (panStateRef.current?.pointerId !== event.pointerId) return;
 		panStateRef.current = null;
+		isPanningRef.current = false;
 		setIsPanning(false);
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
 	};
 
+	const handlePreviewSectionClick = (section: SectionKey) => {
+		if (isPanningRef.current || isSpacePanningRef.current) return;
+		setActiveSection(section);
+		setRightPanelOpen(true);
+		setAppearancePanelOpen(false);
+	};
+
 	const handleCreateResume = (input: { name: string; tags: string[] }) => {
 		const nextDocument = createResumeDocument({
 			name: input.name,
 			tags: input.tags,
-			template: "blank",
 		});
 		setLibrary((current) => ({
 			...current,
@@ -776,7 +1249,8 @@ function App() {
 		const inner = resumePreviewInnerRef.current;
 		if (!preview || !inner) return;
 
-		const previewWidth = preview.getBoundingClientRect().width || preview.scrollWidth;
+		const previewWidth =
+			preview.getBoundingClientRect().width || preview.scrollWidth;
 		const pxPerMm = previewWidth / A4_WIDTH_MM;
 		const printablePageHeight = Math.max(
 			1,
@@ -814,6 +1288,7 @@ function App() {
 		themeId,
 		fontSizePt,
 		sectionIcons,
+		sectionPreferences,
 		view,
 	]);
 
@@ -827,14 +1302,14 @@ function App() {
 					fontSizePt: DEFAULT_RESUME_FONT_SIZE_PT,
 					pageMarginMm: DEFAULT_RESUME_PAGE_MARGIN_MM,
 					sectionIcons: getDefaultSectionIconVisibility(DEFAULT_THEME_ID),
+					sectionPreferences: DEFAULT_SECTION_PREFERENCES,
 				},
 			}));
 		}
 	};
 
 	const handlePrint = useCallback(() => {
-		const name =
-			resumeData.personal.name.trim() || activeDocument.name.trim() || "简历";
+		const name = getPrintTitleName(activeDocument, resumeData);
 		const originalTitle = document.title;
 		const canvasNode = canvasScrollRef.current;
 		const savedScroll = canvasNode
@@ -886,7 +1361,7 @@ function App() {
 
 		preparePrint();
 		window.print();
-	}, [activeDocument.name, resumeData.personal.name]);
+	}, [activeDocument, resumeData]);
 
 	const handleExport = () => {
 		const backup = createResumeBackup(
@@ -895,6 +1370,7 @@ function App() {
 			fontSizePt,
 			pageMarginMm,
 			sectionIcons,
+			sectionPreferences,
 		);
 		const json = JSON.stringify(backup, null, 2);
 		const blob = new Blob([json], { type: "application/json" });
@@ -984,6 +1460,8 @@ function App() {
 							sectionIcons:
 								imported.sectionIcons ??
 								getDefaultSectionIconVisibility(importedThemeId),
+							sectionPreferences:
+								imported.sectionPreferences ?? sectionPreferences,
 						},
 						document.appearance,
 					),
@@ -998,16 +1476,35 @@ function App() {
 	const printablePageHeightMm = getPrintablePageHeightMm(pageMarginMm);
 
 	if (view === "manager") {
-		return (
-			<ResumeManager
-				documents={library.documents}
-				onCreate={handleCreateResume}
-				onOpen={handleOpenResume}
-				onDuplicate={handleDuplicateResume}
-				onDelete={handleDeleteResume}
-			/>
-		);
-	}
+			return (
+				<ResumeManager
+					documents={library.documents}
+					onCreate={handleCreateResume}
+					onOpen={handleOpenResume}
+					onDuplicate={handleDuplicateResume}
+					onDelete={handleDeleteResume}
+					onExportUserData={handleExportUserData}
+					onImportUserData={handleImportUserData}
+					cloudSync={{
+						connected: Boolean(cloudSyncAuth),
+						login: cloudSyncAuth?.login,
+						gistId: cloudSyncSettings.gistId,
+						lastDirection: cloudSyncSettings.lastDirection,
+						lastSyncedAt: cloudSyncSettings.lastSyncedAt,
+						message: cloudSyncMessage,
+						status: cloudSyncStatus,
+						oauthConfigured: Boolean(
+							import.meta.env.VITE_GITHUB_OAUTH_CLIENT_ID,
+						),
+					}}
+					onCloudConnect={handleCloudConnect}
+					onCloudDisconnect={handleCloudDisconnect}
+					onCloudGistIdChange={handleCloudGistIdChange}
+					onCloudPush={handleCloudPush}
+					onCloudPull={handleCloudPull}
+				/>
+			);
+		}
 
 	const canvasPanClass = isPanning
 		? "canvas-panning"
@@ -1022,7 +1519,7 @@ function App() {
 	const currentThemeName = themes[themeId].name;
 
 	return (
-		<div className="relative min-h-screen bg-slate-100 font-sans text-slate-900 print:bg-white lg:h-screen lg:overflow-hidden">
+		<div className="relative min-h-screen bg-slate-100 font-sans text-slate-900 print:h-auto print:min-h-0 print:overflow-visible print:bg-white lg:h-screen lg:overflow-hidden">
 			<input
 				ref={importInputRef}
 				type="file"
@@ -1031,57 +1528,57 @@ function App() {
 				onChange={handleImportFile}
 			/>
 
-			<div className={toolbarFrameClass} data-workbench-chrome="true">
-				<div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/55 bg-white/72 px-1.5 py-1 shadow-sm shadow-slate-900/5 backdrop-blur scrollbar-none">
-					<div className="relative">
-						<button
-							type="button"
-							onClick={() => setAppearancePanelOpen((open) => !open)}
-							className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100/80"
-							title="外观设置"
-							aria-expanded={appearancePanelOpen}
-						>
-							<SlidersHorizontal size={14} className="text-slate-400" />
-							<span>外观</span>
-							<span className="hidden max-w-20 truncate text-slate-400 sm:inline">
-								{currentThemeName}
-							</span>
-						</button>
-						{appearancePanelOpen && (
-							<div className="absolute left-0 top-10 z-20 w-[min(88vw,380px)] rounded-xl border border-slate-200/80 bg-white/95 p-2 shadow-xl shadow-slate-900/10 backdrop-blur">
-								<div className="mb-2 flex items-center justify-between px-2 py-1">
-									<span className="text-xs font-bold text-slate-700">
-										外观设置
-									</span>
-									<span className="text-[11px] text-slate-400">
-										{fontSizePt}pt · {pageMarginMm}mm
-									</span>
+				<div className={toolbarFrameClass} data-workbench-chrome="true">
+					<div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-visible rounded-xl border border-slate-200/55 bg-white/72 px-1.5 py-1 shadow-sm shadow-slate-900/5 backdrop-blur">
+						<div className="relative">
+							<button
+								type="button"
+								onClick={() => setAppearancePanelOpen((open) => !open)}
+								className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100/80"
+								title="外观设置"
+								aria-expanded={appearancePanelOpen}
+							>
+								<SlidersHorizontal size={14} className="text-slate-400" />
+								<span>外观</span>
+								<span className="hidden max-w-20 truncate text-slate-400 sm:inline">
+									{currentThemeName}
+								</span>
+							</button>
+							{appearancePanelOpen && (
+								<div className="absolute left-1/2 top-10 z-20 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-xl border border-slate-200/80 bg-white/95 p-2 shadow-xl shadow-slate-900/10 backdrop-blur">
+									<div className="mb-2 flex items-center justify-between px-2 py-1">
+										<span className="text-xs font-bold text-slate-700">
+											外观设置
+										</span>
+										<span className="text-[11px] text-slate-400">
+											{fontSizePt}pt · {pageMarginMm}mm
+										</span>
+									</div>
+									<div className="flex flex-wrap items-center gap-2">
+										<ThemePicker
+											current={themeId}
+											favoriteThemeIds={favoriteThemeIds}
+											onChange={handleThemeChange}
+											onToggleFavorite={handleToggleFavoriteTheme}
+										/>
+										<FontSizeControl
+											value={fontSizePt}
+											onChange={handleFontSizeChange}
+										/>
+										<PageMarginControl
+											value={pageMarginMm}
+											onChange={handlePageMarginChange}
+										/>
+									</div>
 								</div>
-								<div className="grid gap-2">
-									<ThemePicker
-										current={themeId}
-										favoriteThemeIds={favoriteThemeIds}
-										onChange={handleThemeChange}
-										onToggleFavorite={handleToggleFavoriteTheme}
-									/>
-									<FontSizeControl
-										value={fontSizePt}
-										onChange={handleFontSizeChange}
-									/>
-									<PageMarginControl
-										value={pageMarginMm}
-										onChange={handlePageMarginChange}
-									/>
-								</div>
+							)}
 							</div>
-						)}
+							<PreviewZoomControl value={previewZoom} onChange={setPreviewZoom} />
+							<span className="ml-1 shrink-0 rounded-full border border-slate-200/60 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-slate-400 opacity-80 backdrop-blur-sm">
+								预计 {previewPageCount} 页
+							</span>
 					</div>
-					<PreviewZoomControl value={previewZoom} onChange={setPreviewZoom} />
-					<span className="ml-1 shrink-0 rounded-full border border-slate-200/60 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-slate-400 opacity-80 backdrop-blur-sm">
-						预计 {previewPageCount} 页
-					</span>
 				</div>
-			</div>
 
 			{leftPanelOpen ? (
 				<div
@@ -1188,6 +1685,12 @@ function App() {
 									onChange={handleResumeDataChange}
 									onSectionIconsChange={handleSectionIconsChange}
 								/>
+								<ResumeDisplayPreferencesEditor
+									sectionOrder={resumeData.sectionOrder}
+									sectionTitles={resumeData.sectionTitles}
+									preferences={sectionPreferences}
+									onChange={handleSectionPreferencesChange}
+								/>
 							</div>
 						</div>
 					</aside>
@@ -1209,15 +1712,15 @@ function App() {
 				ref={canvasScrollRef}
 				tabIndex={-1}
 				aria-label="简历预览画布"
-				className={`min-h-[70vh] overflow-auto bg-slate-100 print:block print:min-h-0 print:overflow-visible print:bg-white lg:h-screen scrollbar-none ${canvasPanClass}`}
+				className={`min-h-[70vh] overflow-auto bg-slate-100 outline-none print:block print:h-auto print:min-h-0 print:overflow-visible print:bg-white lg:h-screen scrollbar-none ${canvasPanClass}`}
 				onPointerDown={handleCanvasPointerDown}
 				onPointerMove={handleCanvasPointerMove}
 				onPointerUp={stopCanvasPan}
 				onPointerCancel={stopCanvasPan}
 				onLostPointerCapture={stopCanvasPan}
 			>
-				<div className="min-h-full p-4 pt-20 print:p-0 sm:p-5 sm:pt-20 lg:min-w-[calc(100vw+760px)] lg:px-[360px] lg:pb-5 lg:pt-20 xl:px-[400px]">
-					<div className="flex min-h-full justify-center pb-20">
+				<div className="min-h-full p-4 pt-20 print:h-auto print:min-h-0 print:p-0 sm:p-5 sm:pt-20 lg:min-w-[calc(100vw+760px)] lg:px-[360px] lg:pb-5 lg:pt-20 xl:px-[400px]">
+					<div className="flex min-h-full justify-center pb-20 print:block print:min-h-0 print:pb-0">
 						<div className="mx-auto w-fit">
 							<div
 								className="resume-preview-scale-shell print:w-auto"
@@ -1242,7 +1745,9 @@ function App() {
 										fontSizePt={fontSizePt}
 										pageMarginMm={pageMarginMm}
 										sectionIcons={sectionIcons}
+										sectionPreferences={sectionPreferences}
 										minPageCount={previewPageCount}
+										onSectionClick={handlePreviewSectionClick}
 									/>
 									{Array.from(
 										{ length: previewPageCount - 1 },

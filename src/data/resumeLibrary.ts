@@ -1,18 +1,20 @@
 import { initialResumeState } from "./initialData";
 import {
-	createBlankResumeData,
 	createSectionIconVisibility,
 	isRecord,
 	normalizeResumeData,
 	normalizeSectionIconVisibility,
 } from "./resumeData";
 import {
+	DEFAULT_SECTION_PREFERENCES,
 	DEFAULT_RESUME_FONT_SIZE_PT,
 	DEFAULT_RESUME_PAGE_MARGIN_MM,
 	normalizeResumeFontSize,
 	normalizeResumePageMargin,
+	normalizeResumeSectionPreferences,
 	type ResumeFontSizePt,
 	type ResumePageMarginMm,
+	type ResumeSectionPreferences,
 } from "./resumeStyle";
 import {
 	DEFAULT_THEME_ID,
@@ -27,6 +29,7 @@ export interface ResumeAppearance {
 	fontSizePt: ResumeFontSizePt;
 	pageMarginMm: ResumePageMarginMm;
 	sectionIcons: SectionIconVisibility;
+	sectionPreferences: ResumeSectionPreferences;
 }
 
 export interface ResumeDocument {
@@ -53,7 +56,6 @@ interface CreateResumeDocumentOptions {
 	data?: ResumeData;
 	appearance?: Partial<ResumeAppearance>;
 	now?: string;
-	template?: "sample" | "blank";
 }
 
 const DEFAULT_RESUME_VERSION = "1.0.0";
@@ -129,6 +131,14 @@ export function normalizeResumeAppearance(
 			raw.sectionIcons,
 			fallbackIcons,
 		),
+		sectionPreferences: normalizeResumeSectionPreferences(
+			raw.sectionPreferences,
+			fallback?.sectionPreferences ?? DEFAULT_SECTION_PREFERENCES,
+			{
+				projectLinksPosition: raw.projectLinksPosition,
+				showProjectTags: raw.showProjectTags,
+			},
+		),
 	};
 }
 
@@ -136,15 +146,14 @@ export function createResumeDocument(
 	options: CreateResumeDocumentOptions = {},
 ): ResumeDocument {
 	const now = options.now ?? new Date().toISOString();
-	const baseData =
-		options.data ??
-		(options.template === "blank" ? createBlankResumeData() : initialResumeState);
+	const baseData = options.data ?? initialResumeState;
 	const data = normalizeResumeData(baseData);
 	const appearance = normalizeResumeAppearance(options.appearance, {
 		themeId: DEFAULT_THEME_ID,
 		fontSizePt: DEFAULT_RESUME_FONT_SIZE_PT,
 		pageMarginMm: DEFAULT_RESUME_PAGE_MARGIN_MM,
 		sectionIcons: createSectionIconVisibility(true),
+		sectionPreferences: DEFAULT_SECTION_PREFERENCES,
 	});
 	const personalName = data.personal.name.trim();
 

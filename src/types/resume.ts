@@ -30,6 +30,7 @@ export interface Experience {
 export interface Project {
 	id: number;
 	name: string;
+	date: string;
 	tags: string;
 	link: string;
 	source: string;

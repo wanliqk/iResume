@@ -165,7 +165,7 @@ const timeline: ThemeConfig = {
 	contentDensity: "standard",
 	skillLayout: "columns",
 	experienceStyle: "timeline",
-	projectStyle: "boxed",
+	projectStyle: "timeline",
 	tagStyle: "outline",
 };
 
@@ -236,7 +236,7 @@ const executive: ThemeConfig = {
 	contentDensity: "standard",
 	skillLayout: "columns",
 	experienceStyle: "timeline",
-	projectStyle: "boxed",
+	projectStyle: "timeline",
 	tagStyle: "outline",
 };
 
@@ -443,7 +443,7 @@ const aurora: ThemeConfig = {
 	contentDensity: "standard",
 	skillLayout: "chips",
 	experienceStyle: "timeline",
-	projectStyle: "boxed",
+	projectStyle: "timeline",
 	tagStyle: "outline",
 };
 

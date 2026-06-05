@@ -41,12 +41,12 @@ const ThemePicker = ({
 	return (
 		<>
 			{/* 触发按钮 */}
-			<button
-				type="button"
-				onClick={() => setOpen((v) => !v)}
-				className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100/80"
-				title="切换简历主题"
-			>
+				<button
+					type="button"
+					onClick={() => setOpen((v) => !v)}
+					className="flex h-8 w-fit justify-self-start items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100/80"
+					title="切换简历主题"
+				>
 				<Palette size={14} className="text-slate-400" />
 				<span className="hidden sm:inline">{currentTheme.name}</span>
 			</button>

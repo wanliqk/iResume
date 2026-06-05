@@ -3,8 +3,10 @@ import {
 	DEFAULT_RESUME_PAGE_MARGIN_MM,
 	normalizeResumeFontSize,
 	normalizeResumePageMargin,
+	normalizeResumeSectionPreferences,
 	type ResumeFontSizePt,
 	type ResumePageMarginMm,
+	type ResumeSectionPreferences,
 } from "./resumeStyle";
 import { DEFAULT_THEME_ID, isThemeId } from "./themes";
 import {
@@ -17,13 +19,14 @@ import type { ResumeData, SectionIconVisibility } from "../types/resume";
 import type { ThemeId } from "../types/theme";
 
 export interface ResumeBackup {
-	version: 3;
+	version: 5;
 	data: ResumeData;
 	appearance: {
 		themeId: ThemeId;
 		fontSizePt: ResumeFontSizePt;
 		pageMarginMm: ResumePageMarginMm;
 		sectionIcons: SectionIconVisibility;
+		sectionPreferences: ResumeSectionPreferences;
 	};
 }
 
@@ -33,6 +36,7 @@ export interface ImportedResumeBackup {
 	fontSizePt?: ResumeFontSizePt;
 	pageMarginMm?: ResumePageMarginMm;
 	sectionIcons?: SectionIconVisibility;
+	sectionPreferences?: ResumeSectionPreferences;
 }
 
 export function createResumeBackup(
@@ -41,15 +45,17 @@ export function createResumeBackup(
 	fontSizePt: ResumeFontSizePt,
 	pageMarginMm: ResumePageMarginMm,
 	sectionIcons: SectionIconVisibility,
+	sectionPreferences: ResumeSectionPreferences,
 ): ResumeBackup {
 	return {
-		version: 3,
+		version: 5,
 		data,
 		appearance: {
 			themeId,
 			fontSizePt,
 			pageMarginMm,
 			sectionIcons,
+			sectionPreferences,
 		},
 	};
 }
@@ -65,6 +71,12 @@ export function normalizeResumeBackup(raw: unknown): ImportedResumeBackup {
 	const fontSizeValue = appearance.fontSizePt ?? raw.fontSizePt;
 	const pageMarginValue = appearance.pageMarginMm ?? raw.pageMarginMm;
 	const sectionIconsValue = appearance.sectionIcons ?? raw.sectionIcons;
+	const sectionPreferencesValue =
+		appearance.sectionPreferences ?? raw.sectionPreferences;
+	const legacyProjectLinksPosition =
+		appearance.projectLinksPosition ?? raw.projectLinksPosition;
+	const legacyShowProjectTags =
+		appearance.showProjectTags ?? raw.showProjectTags;
 
 	const result: ImportedResumeBackup = {
 		data: normalizeResumeData(rawData),
@@ -90,6 +102,21 @@ export function normalizeResumeBackup(raw: unknown): ImportedResumeBackup {
 		result.sectionIcons = normalizeSectionIconVisibility(
 			sectionIconsValue,
 			createSectionIconVisibility(false),
+		);
+	}
+
+	if (
+		sectionPreferencesValue !== undefined ||
+		legacyProjectLinksPosition !== undefined ||
+		legacyShowProjectTags !== undefined
+	) {
+		result.sectionPreferences = normalizeResumeSectionPreferences(
+			sectionPreferencesValue,
+			undefined,
+			{
+				projectLinksPosition: legacyProjectLinksPosition,
+				showProjectTags: legacyShowProjectTags,
+			},
 		);
 	}
 

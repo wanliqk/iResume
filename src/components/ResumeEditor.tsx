@@ -9,8 +9,9 @@ import {
 	Trash2,
 	Wrench,
 } from "lucide-react";
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createResumeItemId } from "../data/resumeData";
+import ToggleSwitch from "./ToggleSwitch";
 import type {
 	Education,
 	Experience,
@@ -234,6 +235,7 @@ const ResumeEditor = ({
 	onChange,
 	onSectionIconsChange,
 }: ResumeEditorProps) => {
+	const detailsScrollRef = useRef<HTMLDivElement>(null);
 	const updatePersonal = (key: keyof ResumeData["personal"], value: string) => {
 		onChange({ ...data, personal: { ...data.personal, [key]: value } });
 	};
@@ -260,6 +262,11 @@ const ResumeEditor = ({
 	const allSectionIconsVisible = data.sectionOrder.every(
 		(key) => sectionIcons[key],
 	);
+
+	useEffect(() => {
+		if (panel !== "details") return;
+		detailsScrollRef.current?.scrollTo({ top: 0 });
+	}, [activeSection, panel]);
 
 	const updateSkill = (id: number, key: keyof SkillItem, value: string) => {
 		onChange({
@@ -536,11 +543,10 @@ const ResumeEditor = ({
 						</span>
 						<span>标题图标</span>
 					</span>
-					<input
-						type="checkbox"
+					<ToggleSwitch
 						checked={allSectionIconsVisible}
-						onChange={(event) => updateAllSectionIcons(event.target.checked)}
-						className="h-4 w-4 accent-blue-600"
+						onChange={updateAllSectionIcons}
+						label="标题图标"
 					/>
 				</label>
 			</PanelBlock>
@@ -709,6 +715,7 @@ const ResumeEditor = ({
 					onClick={() =>
 						addItem<Project>("projects", {
 							name: "新项目",
+							date: "",
 							tags: "",
 							link: "",
 							source: "",
@@ -735,13 +742,33 @@ const ResumeEditor = ({
 								updateArrayItem<Project>("projects", project.id, "name", value)
 							}
 						/>
-						<InputGroup
-							label="技术标签"
-							value={project.tags}
-							onChange={(value) =>
-								updateArrayItem<Project>("projects", project.id, "tags", value)
-							}
-						/>
+						<div className="grid grid-cols-[minmax(0,1fr)_120px] gap-2">
+							<InputGroup
+								label="技术标签"
+								value={project.tags}
+								onChange={(value) =>
+									updateArrayItem<Project>(
+										"projects",
+										project.id,
+										"tags",
+										value,
+									)
+								}
+							/>
+							<InputGroup
+								label="时间"
+								value={project.date}
+								onChange={(value) =>
+									updateArrayItem<Project>(
+										"projects",
+										project.id,
+										"date",
+										value,
+									)
+								}
+								placeholder="例：2024.03"
+							/>
+						</div>
 						<div className="grid grid-cols-2 gap-2">
 							<InputGroup
 								label="Demo"
@@ -795,6 +822,7 @@ const ResumeEditor = ({
 								onClick={() =>
 									addItem<Project>("projects", {
 										name: "新项目",
+										date: "",
 										tags: "",
 										link: "",
 										source: "",
@@ -907,7 +935,10 @@ const ResumeEditor = ({
 					</div>
 				</div>
 			</div>
-			<div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+			<div
+				ref={detailsScrollRef}
+				className="min-h-0 flex-1 overflow-y-auto custom-scrollbar"
+			>
 				{renderSectionSettings()}
 				{renderActiveSectionEditor()}
 			</div>

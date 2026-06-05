@@ -1,15 +1,34 @@
 import {
 	Clock3,
+	Cloud,
+	CloudDownload,
+	CloudUpload,
 	Copy,
+	Database,
+	Download,
 	FilePlus2,
 	Github,
-	LayoutGrid,
+	Link,
+	LogOut,
+	MoreHorizontal,
 	Plus,
+	Settings2,
+	ShieldCheck,
 	Tags,
 	Trash2,
+	Upload,
 } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
-import { normalizeResumeTags, type ResumeDocument } from "../data/resumeLibrary";
+import {
+	useMemo,
+	useRef,
+	useState,
+	type ChangeEvent,
+	type FormEvent,
+} from "react";
+import {
+	normalizeResumeTags,
+	type ResumeDocument,
+} from "../data/resumeLibrary";
 import ResumePreview from "./ResumePreview";
 
 interface CreateResumeInput {
@@ -23,6 +42,14 @@ interface ResumeManagerProps {
 	onOpen: (id: string) => void;
 	onDuplicate: (id: string) => void;
 	onDelete: (id: string) => void;
+	onExportUserData: () => void;
+	onImportUserData: (file: File) => Promise<string | null>;
+	cloudSync: CloudSyncViewState;
+	onCloudConnect: () => void;
+	onCloudDisconnect: () => void;
+	onCloudGistIdChange: (gistId: string) => void;
+	onCloudPush: () => Promise<void>;
+	onCloudPull: () => Promise<void>;
 }
 
 interface ResumeCardProps {
@@ -31,6 +58,19 @@ interface ResumeCardProps {
 	onOpen: () => void;
 	onDuplicate: () => void;
 	onDelete: () => void;
+}
+
+type CloudSyncStatus = "idle" | "connecting" | "uploading" | "downloading";
+
+interface CloudSyncViewState {
+	connected: boolean;
+	login?: string;
+	gistId: string;
+	lastDirection?: "push" | "pull";
+	lastSyncedAt?: string;
+	message: string | null;
+	status: CloudSyncStatus;
+	oauthConfigured: boolean;
 }
 
 const formatUpdatedAt = (value: string) => {
@@ -87,6 +127,7 @@ const ResumeThumbnail = ({
 				fontSizePt={document.appearance.fontSizePt}
 				pageMarginMm={document.appearance.pageMarginMm}
 				sectionIcons={document.appearance.sectionIcons}
+				sectionPreferences={document.appearance.sectionPreferences}
 				minPageCount={1}
 			/>
 		</div>
@@ -230,7 +271,7 @@ const CreateResumeCard = ({ onClick }: { onClick: () => void }) => (
 			<Plus size={22} />
 		</span>
 		<span className="text-sm font-semibold">新建简历</span>
-		<span className="mt-1 text-xs text-slate-300">空白开始</span>
+		<span className="mt-1 text-xs text-slate-300">使用内置示例</span>
 	</button>
 );
 
@@ -325,14 +366,316 @@ const CreateResumeModal = ({
 	);
 };
 
+interface UserSettingsModalProps {
+	onClose: () => void;
+	onExportUserData: () => void;
+	onImportUserData: (file: File) => Promise<string | null>;
+	cloudSync: CloudSyncViewState;
+	onCloudConnect: () => void;
+	onCloudDisconnect: () => void;
+	onCloudGistIdChange: (gistId: string) => void;
+	onCloudPush: () => Promise<void>;
+	onCloudPull: () => Promise<void>;
+}
+
+type SettingsTab = "sync" | "data" | "workflow";
+
+const settingsTabs: {
+	id: SettingsTab;
+	label: string;
+	icon: typeof Database;
+}[] = [
+	{ id: "sync", label: "云同步", icon: Cloud },
+	{ id: "data", label: "用户数据", icon: Database },
+	{ id: "workflow", label: "工作流", icon: Copy },
+];
+
+const UserSettingsModal = ({
+	onClose,
+	onExportUserData,
+	onImportUserData,
+	cloudSync,
+	onCloudConnect,
+	onCloudDisconnect,
+	onCloudGistIdChange,
+	onCloudPush,
+	onCloudPull,
+}: UserSettingsModalProps) => {
+	const inputRef = useRef<HTMLInputElement>(null);
+	const [activeTab, setActiveTab] = useState<SettingsTab>("sync");
+	const [message, setMessage] = useState<string | null>(null);
+	const [advancedSyncOpen, setAdvancedSyncOpen] = useState(false);
+	const cloudBusy = cloudSync.status !== "idle";
+	const canUseCloud = cloudSync.connected && !cloudBusy;
+	const lastSyncText = cloudSync.lastSyncedAt
+		? `${cloudSync.lastDirection === "pull" ? "恢复" : "上传"} · ${formatUpdatedAt(cloudSync.lastSyncedAt)}`
+		: "尚未同步";
+
+	const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+		const file = event.target.files?.[0];
+		event.target.value = "";
+		if (!file) return;
+
+		const error = await onImportUserData(file);
+		setMessage(error ?? "用户数据已导入");
+	};
+
+	return (
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/15 px-4 backdrop-blur-[2px]">
+			<div className="w-full max-w-xl rounded-lg border border-slate-200 bg-slate-50 p-4 shadow-lg shadow-slate-900/[0.08]">
+				<input
+					ref={inputRef}
+					type="file"
+					accept=".json,application/json"
+					className="hidden"
+					onChange={handleImportFile}
+				/>
+				<div className="mb-4 flex items-start justify-between gap-4">
+					<div className="flex items-center gap-3">
+						<span className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-slate-500 ring-1 ring-slate-200/80">
+							<Settings2 size={18} />
+						</span>
+						<div>
+							<h2 className="text-lg font-bold text-slate-900">设置</h2>
+							<p className="mt-0.5 text-sm text-slate-400">
+								数据与工作流
+							</p>
+						</div>
+					</div>
+					<button
+						type="button"
+						onClick={onClose}
+						className="rounded-md px-2 py-1 text-sm font-medium text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+					>
+						关闭
+					</button>
+				</div>
+
+				<div className="mb-4 flex w-fit rounded-lg border border-slate-200/80 bg-white p-1">
+					{settingsTabs.map((tab) => {
+						const Icon = tab.icon;
+						const active = tab.id === activeTab;
+						return (
+							<button
+								key={tab.id}
+								type="button"
+								onClick={() => setActiveTab(tab.id)}
+								className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors ${
+									active
+										? "bg-blue-50 text-blue-600"
+										: "text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+								}`}
+							>
+								<Icon size={14} />
+								{tab.label}
+							</button>
+						);
+					})}
+				</div>
+
+				{activeTab === "sync" && (
+					<section className="rounded-lg border border-slate-200/80 bg-white p-4">
+						<div className="mb-4 flex items-start justify-between gap-3">
+							<div>
+									<h3 className="text-sm font-bold text-slate-800">
+										GitHub Gist 云同步
+									</h3>
+									<p className="mt-1 text-xs leading-relaxed text-slate-400">
+										登录后自动加密同步。
+									</p>
+								</div>
+							<span
+								className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+									cloudSync.connected
+										? "bg-blue-50 text-blue-600"
+										: "bg-slate-100 text-slate-400"
+								}`}
+							>
+								{cloudSync.connected
+									? cloudSync.login || "已连接"
+									: "未连接"}
+							</span>
+						</div>
+
+								<div className="rounded-md bg-slate-50 px-3 py-2">
+									<span className="text-xs font-medium text-slate-400">
+										同步状态
+									</span>
+									<p className="mt-1 text-sm font-semibold text-slate-700">
+										{cloudSync.connected ? "已准备同步" : "连接后可同步"}
+									</p>
+								</div>
+
+						<div className="mt-4 flex flex-wrap gap-2">
+							{cloudSync.connected ? (
+								<button
+									type="button"
+									onClick={onCloudDisconnect}
+									className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"
+								>
+									<LogOut size={15} />
+									断开 GitHub
+								</button>
+							) : (
+								<button
+									type="button"
+									onClick={onCloudConnect}
+									disabled={!cloudSync.oauthConfigured || cloudBusy}
+									className="inline-flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50/70 px-3 py-2 text-sm font-medium text-blue-600 transition hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-45"
+								>
+									<Github size={15} />
+									连接 GitHub
+								</button>
+							)}
+								<button
+									type="button"
+									onClick={() => void onCloudPush()}
+									disabled={!canUseCloud}
+								className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+							>
+								<CloudUpload size={15} />
+								上传到云端
+							</button>
+									<button
+										type="button"
+										onClick={() => void onCloudPull()}
+										disabled={!canUseCloud}
+									className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+								>
+								<CloudDownload size={15} />
+								从云端恢复
+							</button>
+						</div>
+
+						<div className="mt-4 grid gap-2 text-xs text-slate-400 sm:grid-cols-2">
+							<div className="rounded-md bg-slate-50 px-3 py-2">
+								<span className="block font-medium text-slate-500">
+									最近同步
+								</span>
+								<span className="mt-1 block">{lastSyncText}</span>
+							</div>
+							<div className="rounded-md bg-slate-50 px-3 py-2">
+								<span className="flex items-center gap-1.5 font-medium text-slate-500">
+									<ShieldCheck size={13} />
+										加密方式
+									</span>
+								<span className="mt-1 block">AES-GCM 自动密钥</span>
+							</div>
+						</div>
+
+						<div className="mt-3">
+							<button
+								type="button"
+								onClick={() => setAdvancedSyncOpen((open) => !open)}
+								className="text-xs font-medium text-slate-400 transition hover:text-slate-600"
+							>
+								{advancedSyncOpen ? "收起高级绑定" : "高级绑定"}
+							</button>
+							{advancedSyncOpen && (
+								<label className="mt-2 block rounded-md border border-slate-200/80 bg-white p-3">
+									<span className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+										<Link size={13} />
+										Gist ID
+									</span>
+									<input
+										value={cloudSync.gistId}
+										onChange={(event) =>
+											onCloudGistIdChange(event.target.value)
+										}
+										className={inputClass}
+										placeholder="自动查找失败时手动粘贴"
+									/>
+								</label>
+							)}
+						</div>
+
+						{!cloudSync.oauthConfigured && (
+							<p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-600">
+								需要配置 VITE_GITHUB_OAUTH_CLIENT_ID 后才能连接 GitHub。
+							</p>
+						)}
+						{cloudSync.message && (
+							<p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+								{cloudSync.message}
+							</p>
+						)}
+					</section>
+				)}
+
+				{activeTab === "data" && (
+					<section className="rounded-lg border border-slate-200/80 bg-white p-4">
+						<h3 className="text-sm font-bold text-slate-800">用户数据</h3>
+						<p className="mt-1 text-xs leading-relaxed text-slate-400">
+							包含所有简历、主题收藏与预览设置。
+						</p>
+						<div className="mt-4 flex flex-wrap gap-2">
+							<button
+								type="button"
+								onClick={onExportUserData}
+								className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+							>
+								<Download size={15} />
+								导出用户数据
+							</button>
+							<button
+								type="button"
+								onClick={() => inputRef.current?.click()}
+								className="inline-flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50/70 px-3 py-2 text-sm font-medium text-blue-600 transition hover:border-blue-200 hover:bg-blue-50"
+							>
+								<Upload size={15} />
+								导入用户数据
+							</button>
+						</div>
+						{message && (
+							<p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
+								{message}
+							</p>
+						)}
+					</section>
+				)}
+
+				{activeTab === "workflow" && (
+					<section className="grid gap-3 rounded-lg border border-slate-200/80 bg-white p-4 sm:grid-cols-2">
+						<div className="rounded-md bg-slate-50 p-3">
+							<span className="text-xs font-medium text-slate-400">
+								新建简历
+							</span>
+							<p className="mt-1 text-sm font-semibold text-slate-700">
+								内置示例
+							</p>
+						</div>
+						<div className="rounded-md bg-slate-50 p-3">
+							<span className="text-xs font-medium text-slate-400">
+								自定义模板
+							</span>
+							<p className="mt-1 text-sm font-semibold text-slate-700">
+								复制已有简历
+							</p>
+						</div>
+					</section>
+				)}
+			</div>
+		</div>
+	);
+};
+
 const ResumeManager = ({
 	documents,
 	onCreate,
 	onOpen,
 	onDuplicate,
 	onDelete,
+	onExportUserData,
+	onImportUserData,
+	cloudSync,
+	onCloudConnect,
+	onCloudDisconnect,
+	onCloudGistIdChange,
+	onCloudPush,
+	onCloudPull,
 }: ResumeManagerProps) => {
 	const [creating, setCreating] = useState(false);
+	const [settingsOpen, setSettingsOpen] = useState(false);
 	const defaultName = `新简历 ${documents.length + 1}`;
 	const sortedDocuments = useMemo(
 		() =>
@@ -348,27 +691,32 @@ const ResumeManager = ({
 		<div className="min-h-screen bg-slate-100 font-sans text-slate-900">
 			<header className="sticky top-0 z-30 border-b border-slate-200/70 bg-slate-100/90 backdrop-blur">
 				<div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-					<BrandMark />
-					<div className="flex items-center gap-2">
-						<span className="hidden items-center gap-1.5 rounded-full border border-slate-200/70 bg-white/55 px-3 py-1 text-xs font-medium text-slate-400 sm:inline-flex">
-							<LayoutGrid size={14} />
-							{documents.length} 份
-						</span>
-						<a
-							href="https://github.com/dogxii/iResume"
-							target="_blank"
+						<BrandMark />
+						<div className="flex items-center gap-2">
+							<a
+								href="https://github.com/dogxii/iResume"
+								target="_blank"
 							rel="noreferrer"
 							aria-label="GitHub 仓库"
 							className="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/60 hover:text-slate-700"
-						>
-							<Github size={18} />
-						</a>
+							>
+								<Github size={18} />
+							</a>
+							<button
+								type="button"
+								onClick={() => setSettingsOpen(true)}
+								className="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/60 hover:text-slate-700"
+								title="更多设置"
+								aria-label="更多设置"
+							>
+								<MoreHorizontal size={19} />
+							</button>
+						</div>
 					</div>
-				</div>
-			</header>
+				</header>
 
 			<main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
-				<div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+				<div className="mb-5">
 					<div>
 						<p className="mb-1 text-xs font-semibold text-slate-400">
 							本地工作台
@@ -377,10 +725,6 @@ const ResumeManager = ({
 							简历库
 						</h1>
 					</div>
-					<span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200/70 bg-white/55 px-3 py-1 text-xs font-medium text-slate-400">
-						<LayoutGrid size={14} />
-						共 {documents.length} 份本地简历
-					</span>
 				</div>
 
 				<div className="mb-8 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -413,18 +757,32 @@ const ResumeManager = ({
 				</div>
 			</main>
 
-			{creating && (
-				<CreateResumeModal
-					defaultName={defaultName}
-					onClose={() => setCreating(false)}
+				{creating && (
+					<CreateResumeModal
+						defaultName={defaultName}
+						onClose={() => setCreating(false)}
 					onCreate={(input) => {
 						onCreate(input);
 						setCreating(false);
-					}}
-				/>
-			)}
-		</div>
-	);
-};
+						}}
+					/>
+				)}
+
+				{settingsOpen && (
+					<UserSettingsModal
+						onClose={() => setSettingsOpen(false)}
+						onExportUserData={onExportUserData}
+						onImportUserData={onImportUserData}
+						cloudSync={cloudSync}
+						onCloudConnect={onCloudConnect}
+						onCloudDisconnect={onCloudDisconnect}
+						onCloudGistIdChange={onCloudGistIdChange}
+						onCloudPush={onCloudPush}
+						onCloudPull={onCloudPull}
+					/>
+				)}
+			</div>
+		);
+	};
 
 export default ResumeManager;
