@@ -1,4 +1,6 @@
-# iResume
+<div align="center">
+  
+# <img src="./public/favicon.svg" width="30" /> iResume
 
 **在线简历工作台 · 轻量优雅多主题**
 
@@ -8,6 +10,8 @@
 ![License](https://img.shields.io/badge/license-MIT-10b981?style=flat-square)
 ![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript)
+
+</div>
 
 ---
 
