@@ -19,8 +19,11 @@ import {
 	normalizeResumeSectionPreferences,
 	normalizeResumeFontSize,
 	normalizeResumePageMargin,
+	normalizeResumeFontFamily,
+	getResumeFontFamilyCss,
 	type ResumeFontSizePt,
 	type ResumePageMarginMm,
+	type ResumeFontFamily,
 	type ResumeSectionPreferences,
 } from "../data/resumeStyle";
 import { themes } from "../data/themes";
@@ -41,6 +44,7 @@ interface ResumePreviewProps {
 	data: ResumeData;
 	themeId?: ThemeId;
 	fontSizePt?: ResumeFontSizePt;
+	fontFamily?: ResumeFontFamily;
 	pageMarginMm?: ResumePageMarginMm;
 	sectionIcons?: SectionIconVisibility;
 	sectionPreferences?: ResumeSectionPreferences;
@@ -136,6 +140,7 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 			data,
 			themeId = "classic",
 			fontSizePt,
+			fontFamily,
 			pageMarginMm,
 			sectionIcons,
 			sectionPreferences: sectionPreferencesInput,
@@ -161,6 +166,9 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 			sectionPreferencesInput,
 		);
 		const minHeightMm = Math.max(1, minPageCount) * A4_HEIGHT_MM;
+		const normalizedFontFamily = normalizeResumeFontFamily(fontFamily);
+		const fontFamilyCss = getResumeFontFamilyCss(normalizedFontFamily);
+		const fontClass = theme.fontStyle === "serif" ? "font-serif" : "font-sans";
 
 		const previewStyle = {
 			"--resume-page-margin": `${normalizedPageMargin}mm`,
@@ -172,9 +180,8 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 						"--resume-font-scale":
 							normalizedFontSize / DEFAULT_RESUME_FONT_SIZE_PT,
 					}),
+			...(fontFamilyCss ? { fontFamily: fontFamilyCss } : {}),
 		} as React.CSSProperties;
-
-		const fontClass = theme.fontStyle === "serif" ? "font-serif" : "font-sans";
 
 		const hasPhone = data.personal.phone.trim();
 		const hasEmail = data.personal.email.trim();

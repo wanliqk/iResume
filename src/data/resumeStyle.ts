@@ -1,5 +1,6 @@
 export const DEFAULT_RESUME_FONT_SIZE_PT = 10.5;
 export const DEFAULT_RESUME_PAGE_MARGIN_MM = 12;
+export const DEFAULT_RESUME_FONT_FAMILY = "system";
 
 export type SectionDatePosition = "right" | "below";
 export type ProjectLinksPosition = "title" | "below";
@@ -75,6 +76,69 @@ export type ResumeFontSizePt = (typeof RESUME_FONT_SIZE_OPTIONS)[number];
 export const RESUME_PAGE_MARGIN_OPTIONS = [8, 10, 12, 14, 16] as const;
 
 export type ResumePageMarginMm = (typeof RESUME_PAGE_MARGIN_OPTIONS)[number];
+
+export type ResumeFontFamily =
+	| "system"
+	| "songti"
+	| "yahei"
+	| "kaiti"
+	| "heiti"
+	| "fangsong"
+	| "pingfang"
+	| "hiragino"
+	| "noto-sans"
+	| "noto-serif"
+	| "source-han"
+	| "liti"
+	| "youyuan"
+	| "lishu"
+	| "arial"
+	| "times"
+	| "georgia";
+
+export const RESUME_FONT_FAMILY_OPTIONS: {
+	value: ResumeFontFamily;
+	label: string;
+	cssValue: string;
+}[] = [
+	{ value: "system", label: "系统默认", cssValue: "" },
+	{ value: "songti", label: "宋体", cssValue: "SimSun, STSong, Songti SC, serif" },
+	{ value: "yahei", label: "微软雅黑", cssValue: '"Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif' },
+	{ value: "kaiti", label: "楷体", cssValue: "KaiTi, STKaiti, Kaiti SC, serif" },
+	{ value: "heiti", label: "黑体", cssValue: "SimHei, STHeiti, Heiti SC, sans-serif" },
+	{ value: "fangsong", label: "仿宋", cssValue: "FangSong, STFangsong, STFangsong, serif" },
+	{ value: "pingfang", label: "苹方", cssValue: '"PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif' },
+	{ value: "hiragino", label: "冬青黑体", cssValue: '"Hiragino Sans GB", "Microsoft YaHei", "PingFang SC", sans-serif' },
+	{ value: "noto-sans", label: "思源黑体", cssValue: '"Noto Sans SC", "Source Han Sans SC", sans-serif' },
+	{ value: "noto-serif", label: "思源宋体", cssValue: '"Noto Serif SC", "Source Han Serif SC", serif' },
+	{ value: "source-han", label: "source-han-sans", cssValue: '"Source Han Sans SC", "Noto Sans SC", sans-serif' },
+	{ value: "liti", label: "隶书", cssValue: "LiSu, STLibian, Libian SC, serif" },
+	{ value: "youyuan", label: "幼圆", cssValue: "YouYuan, STXihei, sans-serif" },
+	{ value: "lishu", label: "隶变", cssValue: '"STLiti", "LiSu", serif' },
+	{ value: "arial", label: "Arial", cssValue: "Arial, Helvetica, sans-serif" },
+	{ value: "times", label: "Times New Roman", cssValue: '"Times New Roman", Times, serif' },
+	{ value: "georgia", label: "Georgia", cssValue: "Georgia, serif" },
+];
+
+export function isResumeFontFamily(
+	value: unknown,
+): value is ResumeFontFamily {
+	return (
+		typeof value === "string" &&
+		RESUME_FONT_FAMILY_OPTIONS.some((opt) => opt.value === value)
+	);
+}
+
+export function normalizeResumeFontFamily(
+	value: unknown,
+): ResumeFontFamily {
+	return isResumeFontFamily(value) ? value : DEFAULT_RESUME_FONT_FAMILY;
+}
+
+export function getResumeFontFamilyCss(value: ResumeFontFamily): string {
+	const option = RESUME_FONT_FAMILY_OPTIONS.find((opt) => opt.value === value);
+	return option?.cssValue ?? "";
+}
 
 export function isResumeFontSizePt(value: number): value is ResumeFontSizePt {
 	return RESUME_FONT_SIZE_OPTIONS.some((option) => option === value);

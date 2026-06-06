@@ -9,11 +9,14 @@ import {
 	DEFAULT_SECTION_PREFERENCES,
 	DEFAULT_RESUME_FONT_SIZE_PT,
 	DEFAULT_RESUME_PAGE_MARGIN_MM,
+	DEFAULT_RESUME_FONT_FAMILY,
 	normalizeResumeFontSize,
 	normalizeResumePageMargin,
+	normalizeResumeFontFamily,
 	normalizeResumeSectionPreferences,
 	type ResumeFontSizePt,
 	type ResumePageMarginMm,
+	type ResumeFontFamily,
 	type ResumeSectionPreferences,
 } from "./resumeStyle";
 import {
@@ -28,6 +31,7 @@ export interface ResumeAppearance {
 	themeId: ThemeId;
 	fontSizePt: ResumeFontSizePt;
 	pageMarginMm: ResumePageMarginMm;
+	fontFamily: ResumeFontFamily;
 	sectionIcons: SectionIconVisibility;
 	sectionPreferences: ResumeSectionPreferences;
 }
@@ -127,6 +131,9 @@ export function normalizeResumeAppearance(
 				fallback?.pageMarginMm ??
 				DEFAULT_RESUME_PAGE_MARGIN_MM,
 		),
+		fontFamily: normalizeResumeFontFamily(
+			raw.fontFamily ?? fallback?.fontFamily ?? DEFAULT_RESUME_FONT_FAMILY,
+		),
 		sectionIcons: normalizeSectionIconVisibility(
 			raw.sectionIcons,
 			fallbackIcons,
@@ -152,6 +159,7 @@ export function createResumeDocument(
 		themeId: DEFAULT_THEME_ID,
 		fontSizePt: DEFAULT_RESUME_FONT_SIZE_PT,
 		pageMarginMm: DEFAULT_RESUME_PAGE_MARGIN_MM,
+		fontFamily: DEFAULT_RESUME_FONT_FAMILY,
 		sectionIcons: createSectionIconVisibility(true),
 		sectionPreferences: DEFAULT_SECTION_PREFERENCES,
 	});
