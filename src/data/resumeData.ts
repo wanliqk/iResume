@@ -83,14 +83,13 @@ function normalizeSectionTitles(value: unknown): SectionTitles {
 function normalizeSectionVisibility(value: unknown): SectionVisibility {
 	const raw = isRecord(value) ? value : {};
 	const defaults = initialResumeState.sectionVisibility;
+	const result = {} as SectionVisibility;
 
-	return ALL_SECTION_KEYS.reduce(
-		(result, key) => ({
-			...result,
-			[key]: typeof raw[key] === "boolean" ? raw[key] : defaults[key],
-		}),
-		{} as SectionVisibility,
-	);
+	for (const key of ALL_SECTION_KEYS) {
+		result[key] = typeof raw[key] === "boolean" ? raw[key] : defaults[key];
+	}
+
+	return result;
 }
 
 function normalizeSectionOrder(value: unknown): SectionKey[] {

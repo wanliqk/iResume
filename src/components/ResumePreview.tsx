@@ -127,6 +127,18 @@ const hasSectionEntryContent = (item: SectionEntry) =>
 	item.date.trim() ||
 	item.details.trim();
 
+const getSectionEntryDetailSummary = (details: string) =>
+	details
+		.split("\n")
+		.map((line) =>
+			line
+				.trim()
+				.replace(/^[-*•]\s*/, "")
+				.replace(/^\d+[.)、]\s*/, ""),
+		)
+		.filter(Boolean)
+		.join("；");
+
 const BannerLink = ({ href, text, icon, accentClass }: BannerLinkProps) => {
 	const className = `flex items-center gap-1.5 text-slate-300 hover:opacity-80 ${accentClass ?? "hover:text-amber-300"}`;
 	const content = (
@@ -1098,43 +1110,89 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 			key: "awards" | "campus",
 			items: SectionEntry[],
 			isLast: boolean,
-		) => (
-			<section key={key} {...getSectionProps(key, isLast)}>
-				{renderSectionHeader(key)}
-				{items.filter(hasSectionEntryContent).map((item) => (
-					<div key={item.id} className={`${spacing.item} last:mb-0`}>
-						<div className="print-item-header mb-1">
-							<div className="flex items-baseline justify-between gap-4">
-								<div className="min-w-0">
-									{item.title.trim() && (
-										<h3 className={`font-bold text-base ${c.heading}`}>
-											{item.title}
-										</h3>
-									)}
-									{item.subtitle.trim() && (
-										<div className={`text-sm font-medium ${c.primary}`}>
-											{item.subtitle}
-										</div>
+		) => {
+			const visibleItems = items.filter(hasSectionEntryContent);
+			const displayStyle = sectionPreferences[key].displayStyle;
+
+			if (displayStyle === "list") {
+				return (
+					<section key={key} {...getSectionProps(key, isLast)}>
+						{renderSectionHeader(key)}
+						<ul
+							className={`list-disc list-outside ml-4 ${spacing.list} text-sm ${c.body}`}
+						>
+							{visibleItems.map((item) => {
+								const title = item.title.trim();
+								const meta = [item.subtitle.trim(), item.date.trim()]
+									.filter(Boolean)
+									.join(" · ");
+								const details = getSectionEntryDetailSummary(item.details);
+
+								return (
+									<li key={item.id}>
+										{title && (
+											<span className={`font-semibold ${c.heading}`}>
+												{parseInline(title)}
+											</span>
+										)}
+										{meta && (
+											<span className={c.muted}>
+												{title ? " · " : ""}
+												{parseInline(meta)}
+											</span>
+										)}
+										{details && (
+											<span>
+												{title || meta ? "：" : ""}
+												{parseInline(details)}
+											</span>
+										)}
+									</li>
+								);
+							})}
+						</ul>
+					</section>
+				);
+			}
+
+			return (
+				<section key={key} {...getSectionProps(key, isLast)}>
+					{renderSectionHeader(key)}
+					{visibleItems.map((item) => (
+						<div key={item.id} className={`${spacing.item} last:mb-0`}>
+							<div className="print-item-header mb-1">
+								<div className="flex items-baseline justify-between gap-4">
+									<div className="min-w-0">
+										{item.title.trim() && (
+											<h3 className={`font-bold text-base ${c.heading}`}>
+												{item.title}
+											</h3>
+										)}
+										{item.subtitle.trim() && (
+											<div className={`text-sm font-medium ${c.primary}`}>
+												{item.subtitle}
+											</div>
+										)}
+									</div>
+									{item.date.trim() && (
+										<span className={`shrink-0 text-sm ${c.muted}`}>
+											{item.date}
+										</span>
 									)}
 								</div>
-								{item.date.trim() && (
-									<span className={`shrink-0 text-sm ${c.muted}`}>
-										{item.date}
-									</span>
-								)}
 							</div>
+							{item.details.trim() && (
+								<ul
+									className={`list-disc list-outside ml-4 ${spacing.list} text-sm ${c.body}`}
+								>
+									{renderMarkdownList(item.details)}
+								</ul>
+							)}
 						</div>
-						{item.details.trim() && (
-							<ul
-								className={`list-disc list-outside ml-4 ${spacing.list} text-sm ${c.body}`}
-							>
-								{renderMarkdownList(item.details)}
-							</ul>
-						)}
-					</div>
-				))}
-			</section>
-		);
+					))}
+				</section>
+			);
+		};
 
 		const renderAwards = (isLast: boolean) =>
 			renderSectionEntries("awards", data.awards, isLast);

@@ -123,7 +123,7 @@ const sectionFallbackNames: Record<SectionKey, string> = {
 	experience: "工作经历",
 	projects: "项目经历",
 	education: "教育背景",
-	awards: "获奖奖励",
+	awards: "获奖经历",
 	campus: "校园经历",
 	other: "其他",
 };
@@ -139,6 +139,7 @@ const sectionIconNodes: Record<SectionKey, ReactNode> = {
 };
 
 const panelBlockClass = "border-b border-slate-200 p-4 last:border-b-0";
+type SectionEntryTextKey = keyof Omit<SectionEntry, "id">;
 
 const SortableItemWithHandle = ({
 	id,
@@ -191,7 +192,7 @@ const DragHandle = ({
 		ref={activatorRef}
 		{...attributes}
 		{...listeners}
-		className="flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:cursor-grabbing"
+		className="hidden h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:cursor-grabbing sm:flex"
 		title="拖拽排序"
 		aria-label="拖拽排序"
 	>
@@ -435,7 +436,7 @@ const ResumeEditor = ({
 	const updateSectionEntry = (
 		section: "awards" | "campus",
 		id: number,
-		key: keyof SectionEntry,
+		key: SectionEntryTextKey,
 		value: string,
 	) => {
 		onChange({
@@ -809,7 +810,7 @@ const ResumeEditor = ({
 												onRemove={() => removeSkill(skill.id)}
 											/>
 										</div>
-										<div className="pl-8">
+										<div className="sm:pl-8">
 											<InputGroup
 												label="分类名称"
 												value={skill.label}
@@ -884,7 +885,7 @@ const ResumeEditor = ({
 												onRemove={() => removeItem("experience", experience.id)}
 											/>
 										</div>
-										<div className="pl-8">
+										<div className="sm:pl-8">
 											<InputGroup
 												label="公司"
 												value={experience.company}
@@ -1013,7 +1014,7 @@ const ResumeEditor = ({
 												onRemove={() => removeItem("projects", project.id)}
 											/>
 										</div>
-										<div className="pl-8">
+										<div className="sm:pl-8">
 											<InputGroup
 												label="项目名"
 												value={project.name}
@@ -1154,7 +1155,7 @@ const ResumeEditor = ({
 												onRemove={() => removeEducation(education.id)}
 											/>
 										</div>
-										<div className="pl-8">
+										<div className="sm:pl-8">
 											<InputGroup
 												label="学校"
 												value={education.school}
@@ -1254,7 +1255,7 @@ const ResumeEditor = ({
 													}
 												/>
 											</div>
-											<div className="pl-8">
+											<div className="sm:pl-8">
 												<InputGroup
 													label={titleLabel}
 													value={item.title}
@@ -1322,7 +1323,7 @@ const ResumeEditor = ({
 		renderSectionEntryEditor({
 			section: "awards",
 			addTitle: "添加奖项",
-			emptyText: "暂无获奖奖励",
+			emptyText: "暂无获奖经历",
 			titleLabel: "奖项",
 			subtitleLabel: "颁发方",
 			titlePlaceholder: "例：优秀毕业设计",

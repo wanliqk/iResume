@@ -34,7 +34,7 @@ export const initialResumeState: ResumeData = {
 		experience: "工作经历",
 		projects: "项目经验 & 开源贡献",
 		education: "教育背景",
-		awards: "获奖奖励",
+		awards: "获奖经历",
 		campus: "校园经历",
 		other: "其他补充",
 	},
@@ -118,8 +118,7 @@ export const initialResumeState: ResumeData = {
 			title: "全国大学生软件设计竞赛一等奖",
 			subtitle: "中国软件行业协会",
 			date: "2017.11",
-			details:
-				"负责前端交互与性能优化，作品在 120+ 支队伍中获得一等奖。",
+			details: "",
 		},
 	],
 	campus: [
@@ -128,8 +127,7 @@ export const initialResumeState: ResumeData = {
 			title: "校学生科技协会",
 			subtitle: "前端负责人",
 			date: "2016.09 - 2018.06",
-			details:
-				"组织 8 场技术分享与项目实践，带领团队完成校园活动报名系统。",
+			details: "组织技术分享与项目实践，完成校园活动报名系统。",
 		},
 	],
 	other:

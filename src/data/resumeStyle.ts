@@ -7,6 +7,7 @@ export type ProjectLinksPosition = "title" | "below";
 export type ProjectTagPosition = "title" | "below";
 export type SkillContentStyle = "theme" | "text" | "chips";
 export type OtherListStyle = "bullets" | "plain";
+export type SectionEntryDisplayStyle = "list" | "detail";
 
 export interface ResumeSectionPreferences {
 	skills: {
@@ -27,6 +28,12 @@ export interface ResumeSectionPreferences {
 	};
 	education: {
 		showDates: boolean;
+	};
+	awards: {
+		displayStyle: SectionEntryDisplayStyle;
+	};
+	campus: {
+		displayStyle: SectionEntryDisplayStyle;
 	};
 	other: {
 		listStyle: OtherListStyle;
@@ -52,6 +59,12 @@ export const DEFAULT_SECTION_PREFERENCES: ResumeSectionPreferences = {
 	},
 	education: {
 		showDates: true,
+	},
+	awards: {
+		displayStyle: "list",
+	},
+	campus: {
+		displayStyle: "list",
 	},
 	other: {
 		listStyle: "bullets",
@@ -217,6 +230,13 @@ export function normalizeOtherListStyle(
 	return value === "bullets" || value === "plain" ? value : fallback;
 }
 
+export function normalizeSectionEntryDisplayStyle(
+	value: unknown,
+	fallback: SectionEntryDisplayStyle = "list",
+): SectionEntryDisplayStyle {
+	return value === "list" || value === "detail" ? value : fallback;
+}
+
 export function normalizeResumeSectionPreferences(
 	value: unknown,
 	fallback: ResumeSectionPreferences = DEFAULT_SECTION_PREFERENCES,
@@ -230,7 +250,15 @@ export function normalizeResumeSectionPreferences(
 	const experience = isRecord(raw.experience) ? raw.experience : {};
 	const projects = isRecord(raw.projects) ? raw.projects : {};
 	const education = isRecord(raw.education) ? raw.education : {};
+	const awards = isRecord(raw.awards) ? raw.awards : {};
+	const campus = isRecord(raw.campus) ? raw.campus : {};
 	const other = isRecord(raw.other) ? raw.other : {};
+	const fallbackAwardsStyle =
+		fallback.awards?.displayStyle ??
+		DEFAULT_SECTION_PREFERENCES.awards.displayStyle;
+	const fallbackCampusStyle =
+		fallback.campus?.displayStyle ??
+		DEFAULT_SECTION_PREFERENCES.campus.displayStyle;
 
 	return {
 		skills: {
@@ -275,6 +303,18 @@ export function normalizeResumeSectionPreferences(
 		},
 		education: {
 			showDates: readBoolean(education.showDates, fallback.education.showDates),
+		},
+		awards: {
+			displayStyle: normalizeSectionEntryDisplayStyle(
+				awards.displayStyle,
+				fallbackAwardsStyle,
+			),
+		},
+		campus: {
+			displayStyle: normalizeSectionEntryDisplayStyle(
+				campus.displayStyle,
+				fallbackCampusStyle,
+			),
 		},
 		other: {
 			listStyle: normalizeOtherListStyle(

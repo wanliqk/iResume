@@ -19,6 +19,7 @@ import type {
 	ProjectTagPosition,
 	ResumeSectionPreferences,
 	SectionDatePosition,
+	SectionEntryDisplayStyle,
 	SkillContentStyle,
 } from "../data/resumeStyle";
 import type { SectionKey, SectionTitles } from "../types/resume";
@@ -41,7 +42,7 @@ const sectionFallbackNames: Record<SectionKey, string> = {
 	experience: "工作经历",
 	projects: "项目经历",
 	education: "教育背景",
-	awards: "获奖奖励",
+	awards: "获奖经历",
 	campus: "校园经历",
 	other: "其他",
 };
@@ -80,6 +81,11 @@ const projectTagOptions: SegmentedOption<ProjectTagPosition>[] = [
 const otherListOptions: SegmentedOption<OtherListStyle>[] = [
 	{ value: "bullets", label: "项目符号" },
 	{ value: "plain", label: "纯文本" },
+];
+
+const sectionEntryDisplayOptions: SegmentedOption<SectionEntryDisplayStyle>[] = [
+	{ value: "list", label: "列表" },
+	{ value: "detail", label: "详情" },
 ];
 
 const SegmentedControl = <T extends string>({
@@ -357,7 +363,25 @@ const ResumeDisplayPreferencesEditor = ({
 				);
 			case "awards":
 			case "campus":
-				return null;
+				return (
+					<PreferenceBlock
+						key={key}
+						title={getSectionTitle(key)}
+						icon={sectionIconNodes[key]}
+						expanded={expanded}
+						onToggle={() => toggleSection(key)}
+					>
+						<SegmentedControl
+							label="样式"
+							value={preferences[key].displayStyle}
+							options={sectionEntryDisplayOptions}
+							onChange={(displayStyle) =>
+								updateSection(key, { displayStyle })
+							}
+							icon={<List size={12} />}
+						/>
+					</PreferenceBlock>
+				);
 			case "other":
 				return (
 					<PreferenceBlock
