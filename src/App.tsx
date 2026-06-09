@@ -22,6 +22,7 @@ import {
 	type PointerEvent as ReactPointerEvent,
 	type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import FontFamilyControl from "./components/FontFamilyControl";
 import FontSizeControl from "./components/FontSizeControl";
 import PageMarginControl from "./components/PageMarginControl";
@@ -110,6 +111,10 @@ const CLOUD_SYNC_OAUTH_STATE_STORAGE_KEY = "resume-cloud-sync-oauth-state";
 const A4_HEIGHT_MM = 297;
 const A4_WIDTH_MM = 210;
 const PREVIEW_PAGE_GAP_MM = 10;
+const CSS_PX_PER_MM = 96 / 25.4;
+const MOBILE_PREVIEW_BREAKPOINT_PX = 640;
+const MOBILE_PREVIEW_SIDE_PADDING_PX = 32;
+const MIN_MOBILE_PREVIEW_ZOOM = 0.1;
 
 type CloudSyncStatus = "idle" | "connecting" | "uploading" | "downloading";
 
@@ -506,6 +511,7 @@ function App() {
 	const [leftPanelOpen, setLeftPanelOpen] = useState(true);
 	const [rightPanelOpen, setRightPanelOpen] = useState(true);
 	const [appearancePanelOpen, setAppearancePanelOpen] = useState(false);
+	const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
 	const [previewZoom, setPreviewZoom] = useState<PreviewZoom>(() =>
 		normalizePreviewZoom(
 			localStorage.getItem(PREVIEW_ZOOM_STORAGE_KEY) ?? DEFAULT_PREVIEW_ZOOM,
@@ -530,10 +536,33 @@ function App() {
 		sectionIcons,
 		sectionPreferences,
 	} = activeDocument.appearance;
+	const isMobilePreviewViewport =
+		viewportWidth < MOBILE_PREVIEW_BREAKPOINT_PX;
+	const mobilePreviewFitZoom = Math.max(
+		MIN_MOBILE_PREVIEW_ZOOM,
+		Math.min(
+			1,
+			(viewportWidth - MOBILE_PREVIEW_SIDE_PADDING_PX) /
+				(A4_WIDTH_MM * CSS_PX_PER_MM),
+		),
+	);
+	const previewRenderZoom = isMobilePreviewViewport
+		? Math.min(previewZoom, mobilePreviewFitZoom)
+		: previewZoom;
 
 	useEffect(() => {
 		localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(library));
 	}, [library]);
+
+	useEffect(() => {
+		const updateViewportWidth = () => {
+			setViewportWidth(window.innerWidth);
+		};
+
+		updateViewportWidth();
+		window.addEventListener("resize", updateViewportWidth);
+		return () => window.removeEventListener("resize", updateViewportWidth);
+	}, []);
 
 	useEffect(() => {
 		localStorage.setItem(APP_VIEW_STORAGE_KEY, view);
@@ -670,7 +699,7 @@ function App() {
 		});
 
 		return () => cancelAnimationFrame(frame);
-	}, [activeDocument.id, previewZoom, view]);
+	}, [activeDocument.id, previewRenderZoom, view]);
 
 	useEffect(() => {
 		if (!resumeData.sectionOrder.includes(activeSection)) {
@@ -1636,6 +1665,37 @@ function App() {
 			? previewPageCount * A4_HEIGHT_MM +
 				Math.max(0, previewPageCount - 1) * PREVIEW_PAGE_GAP_MM
 			: previewPageCount * A4_HEIGHT_MM;
+	const appearancePanel = appearancePanelOpen ? (
+		<div
+			className={
+				isMobilePreviewViewport
+					? "fixed left-3 top-16 z-[70] max-h-[calc(100vh-5rem)] w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-xl border border-slate-200/80 bg-white/95 p-2 shadow-xl shadow-slate-900/10 backdrop-blur"
+					: "absolute left-1/2 top-10 z-20 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-xl border border-slate-200/80 bg-white/95 p-2 shadow-xl shadow-slate-900/10 backdrop-blur"
+			}
+			data-workbench-chrome="true"
+		>
+			<div className="mb-2 flex items-center justify-between px-2 py-1">
+				<span className="text-xs font-bold text-slate-700">外观设置</span>
+				<span className="text-[11px] text-slate-400">
+					{fontSizePt}pt · {pageMarginMm}mm
+				</span>
+			</div>
+			<div className="flex flex-wrap items-center gap-2">
+				<ThemePicker
+					current={themeId}
+					favoriteThemeIds={favoriteThemeIds}
+					onChange={handleThemeChange}
+					onToggleFavorite={handleToggleFavoriteTheme}
+				/>
+				<FontFamilyControl value={fontFamily} onChange={handleFontFamilyChange} />
+				<FontSizeControl value={fontSizePt} onChange={handleFontSizeChange} />
+				<PageMarginControl
+					value={pageMarginMm}
+					onChange={handlePageMarginChange}
+				/>
+			</div>
+		</div>
+	) : null;
 
 	return (
 		<div className="relative min-h-screen bg-slate-100 font-sans text-slate-900 print:h-auto print:min-h-0 print:overflow-visible print:bg-white lg:h-screen lg:overflow-hidden">
@@ -1659,51 +1719,32 @@ function App() {
 							>
 								<SlidersHorizontal size={14} className="text-slate-400" />
 								<span>外观</span>
-								<span className="hidden max-w-20 truncate text-slate-400 sm:inline">
-									{currentThemeName}
-								</span>
+								{!isMobilePreviewViewport && (
+									<span className="max-w-20 truncate text-slate-400">
+										{currentThemeName}
+									</span>
+								)}
 							</button>
-							{appearancePanelOpen && (
-								<div className="absolute left-1/2 top-10 z-20 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-xl border border-slate-200/80 bg-white/95 p-2 shadow-xl shadow-slate-900/10 backdrop-blur">
-									<div className="mb-2 flex items-center justify-between px-2 py-1">
-										<span className="text-xs font-bold text-slate-700">
-											外观设置
-										</span>
-										<span className="text-[11px] text-slate-400">
-											{fontSizePt}pt · {pageMarginMm}mm
-										</span>
-									</div>
-									<div className="flex flex-wrap items-center gap-2">
-										<ThemePicker
-											current={themeId}
-											favoriteThemeIds={favoriteThemeIds}
-											onChange={handleThemeChange}
-											onToggleFavorite={handleToggleFavoriteTheme}
-										/>
-										<FontFamilyControl
-											value={fontFamily}
-											onChange={handleFontFamilyChange}
-										/>
-										<FontSizeControl
-											value={fontSizePt}
-											onChange={handleFontSizeChange}
-										/>
-										<PageMarginControl
-											value={pageMarginMm}
-											onChange={handlePageMarginChange}
-										/>
-									</div>
-								</div>
-							)}
+							{appearancePanel &&
+								(isMobilePreviewViewport
+									? createPortal(appearancePanel, document.body)
+									: appearancePanel)}
 							</div>
-							<PreviewZoomControl value={previewZoom} onChange={setPreviewZoom} />
+							{!isMobilePreviewViewport && (
+								<PreviewZoomControl
+									value={previewZoom}
+									onChange={setPreviewZoom}
+								/>
+							)}
 							<PreviewPageModeControl
 								value={previewPageMode}
 								onChange={setPreviewPageMode}
 							/>
-							<span className="ml-1 shrink-0 rounded-full border border-slate-200/60 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-slate-400 opacity-80 backdrop-blur-sm">
-								预计 {previewPageCount} 页
-							</span>
+							{!isMobilePreviewViewport && (
+								<span className="ml-1 inline-flex shrink-0 rounded-full border border-slate-200/60 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-slate-400 opacity-80 backdrop-blur-sm">
+									预计 {previewPageCount} 页
+								</span>
+							)}
 					</div>
 				</div>
 
@@ -1852,15 +1893,15 @@ function App() {
 							<div
 								className="resume-preview-scale-shell print:w-auto"
 								style={{
-									height: `${previewCanvasHeightMm * previewZoom}mm`,
-									width: `${A4_WIDTH_MM * previewZoom}mm`,
+									height: `${previewCanvasHeightMm * previewRenderZoom}mm`,
+									width: `${A4_WIDTH_MM * previewRenderZoom}mm`,
 								}}
 							>
 								<div
 									className="resume-preview-scale relative w-[210mm] print:w-full print:min-h-0 print:bg-white print:shadow-none"
 									style={{
 										minHeight: `${previewCanvasHeightMm}mm`,
-										transform: `scale(${previewZoom})`,
+										transform: `scale(${previewRenderZoom})`,
 										transformOrigin: "top left",
 									}}
 								>
