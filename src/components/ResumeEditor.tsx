@@ -5,11 +5,28 @@ import {
 	FileText,
 	FolderGit2,
 	GraduationCap,
+	GripVertical,
 	Plus,
 	Trash2,
 	Wrench,
 } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import {
+	DndContext,
+	closestCenter,
+	KeyboardSensor,
+	PointerSensor,
+	useSensor,
+	useSensors,
+	type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+	SortableContext,
+	sortableKeyboardCoordinates,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { createResumeItemId } from "../data/resumeData";
 import ToggleSwitch from "./ToggleSwitch";
 import type {
@@ -111,6 +128,52 @@ const sectionIconNodes: Record<SectionKey, ReactNode> = {
 
 const panelBlockClass = "border-b border-slate-200 p-4 last:border-b-0";
 
+const SortableItemWithHandle = ({
+	id,
+	children,
+}: {
+	id: string | number;
+	children: (dragHandleProps: {
+		activatorRef: (node: HTMLElement | null) => void;
+	} & Record<string, unknown>) => ReactNode;
+}) => {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+		setActivatorNodeRef,
+	} = useSortable({ id });
+	const style = {
+		transform: CSS.Transform.toString(transform),
+		transition,
+		opacity: isDragging ? 0.4 : undefined,
+		zIndex: isDragging ? 50 : undefined,
+	};
+	return (
+		<div ref={setNodeRef} style={style} {...attributes}>
+			{children({ activatorRef: setActivatorNodeRef, ...listeners })}
+		</div>
+	);
+};
+
+const DragHandle = ({
+	activatorRef,
+	...listeners
+}: {
+	activatorRef: (node: HTMLElement | null) => void;
+} & Record<string, unknown>) => (
+	<span
+		ref={activatorRef}
+		{...listeners}
+		className="flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded text-slate-300 transition-colors hover:text-slate-500 active:cursor-grabbing"
+	>
+		<GripVertical size={14} />
+	</span>
+);
+
 const ItemActions = ({
 	index,
 	total,
@@ -147,33 +210,6 @@ const ItemActions = ({
 		>
 			<Trash2 size={14} />
 		</button>
-	</div>
-);
-
-const ItemEditor = ({
-	title,
-	index,
-	total,
-	onMove,
-	onRemove,
-	children,
-}: ItemActionsProps & {
-	title: string;
-	children: ReactNode;
-}) => (
-	<div className="group border-t border-slate-100 px-1 py-3 first:border-t-0">
-		<div className="mb-2 flex items-center justify-between gap-2">
-			<span className="min-w-0 truncate text-xs font-medium text-slate-400">
-				{title}
-			</span>
-			<ItemActions
-				index={index}
-				total={total}
-				onMove={onMove}
-				onRemove={onRemove}
-			/>
-		</div>
-		{children}
 	</div>
 );
 
@@ -236,6 +272,42 @@ const ResumeEditor = ({
 	onSectionIconsChange,
 }: ResumeEditorProps) => {
 	const detailsScrollRef = useRef<HTMLDivElement>(null);
+
+	const dndSensors = useSensors(
+		useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+		useSensor(KeyboardSensor, {
+			coordinateGetter: sortableKeyboardCoordinates,
+		}),
+	);
+
+	const reorderArray = <T,>(arr: T[], from: number, to: number): T[] => {
+		const next = [...arr];
+		const [moved] = next.splice(from, 1);
+		next.splice(to, 0, moved);
+		return next;
+	};
+
+	const handleSectionDragEnd = (event: DragEndEvent) => {
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+		const oldIndex = data.sectionOrder.indexOf(active.id as SectionKey);
+		const newIndex = data.sectionOrder.indexOf(over.id as SectionKey);
+		if (oldIndex === -1 || newIndex === -1) return;
+		onChange({ ...data, sectionOrder: reorderArray(data.sectionOrder, oldIndex, newIndex) });
+	};
+
+	const handleItemsDragEnd = <T extends { id: number }>(
+		items: T[],
+		field: keyof Pick<ResumeData, "skills" | "experience" | "projects" | "education">,
+	) => (event: DragEndEvent) => {
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+		const oldIndex = items.findIndex((i) => i.id === active.id);
+		const newIndex = items.findIndex((i) => i.id === over.id);
+		if (oldIndex === -1 || newIndex === -1) return;
+		onChange({ ...data, [field]: reorderArray(items, oldIndex, newIndex) });
+	};
+
 	const updatePersonal = (key: keyof ResumeData["personal"], value: string) => {
 		onChange({ ...data, personal: { ...data.personal, [key]: value } });
 	};
@@ -479,63 +551,79 @@ const ResumeEditor = ({
 					</span>
 				}
 			>
-				<div className="space-y-1.5">
-					{data.sectionOrder.map((key, index) => {
-						const active = key === activeSection;
-						return (
-							<div key={key} className="group flex items-center gap-1.5">
-								<button
-									type="button"
-									onClick={() => onActiveSectionChange(key)}
-									className={`flex min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 py-2 text-left transition ${
-										active
-											? "border-blue-200 bg-blue-50 text-blue-700"
-											: "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
-									}`}
-									aria-pressed={active}
-								>
-									<span
-										className={`flex h-7 w-7 shrink-0 items-center justify-center rounded ${
-											active ? "bg-white text-blue-600" : "bg-white text-slate-400"
-										}`}
-									>
-										{sectionIconNodes[key]}
-									</span>
-									<span className="min-w-0 flex-1">
-										<span className="block truncate text-sm font-semibold">
-											{getSectionTitle(key)}
-										</span>
-										<span className="block text-xs text-slate-400">
-											{getSectionSummary(key)}
-										</span>
-									</span>
-								</button>
-								<div className="flex shrink-0 gap-0.5 opacity-60 transition group-hover:opacity-100">
-									<button
-										type="button"
-										onClick={() => moveSectionOrder(index, "up")}
-										disabled={index === 0}
-										className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
-										title="上移"
-										aria-label="上移"
-									>
-										<ArrowUp size={14} />
-									</button>
-									<button
-										type="button"
-										onClick={() => moveSectionOrder(index, "down")}
-										disabled={index === data.sectionOrder.length - 1}
-										className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
-										title="下移"
-										aria-label="下移"
-									>
-										<ArrowDown size={14} />
-									</button>
-								</div>
-							</div>
-						);
-					})}
-				</div>
+				<DndContext
+					sensors={dndSensors}
+					collisionDetection={closestCenter}
+					onDragEnd={handleSectionDragEnd}
+				>
+					<SortableContext
+						items={data.sectionOrder}
+						strategy={verticalListSortingStrategy}
+					>
+						<div className="space-y-1.5">
+							{data.sectionOrder.map((key, index) => {
+								const active = key === activeSection;
+								return (
+									<SortableItemWithHandle key={key} id={key}>
+								{(dragHandle) => (
+									<div className="group flex items-center gap-1.5">
+										<DragHandle {...dragHandle} />
+											<button
+												type="button"
+												onClick={() => onActiveSectionChange(key)}
+												className={`flex min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 py-2 text-left transition ${
+													active
+														? "border-blue-200 bg-blue-50 text-blue-700"
+														: "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
+												}`}
+												aria-pressed={active}
+											>
+												<span
+													className={`flex h-7 w-7 shrink-0 items-center justify-center rounded ${
+														active ? "bg-white text-blue-600" : "bg-white text-slate-400"
+													}`}
+												>
+													{sectionIconNodes[key]}
+												</span>
+												<span className="min-w-0 flex-1">
+													<span className="block truncate text-sm font-semibold">
+														{getSectionTitle(key)}
+													</span>
+													<span className="block text-xs text-slate-400">
+														{getSectionSummary(key)}
+													</span>
+												</span>
+											</button>
+											<div className="flex shrink-0 gap-0.5 opacity-60 transition group-hover:opacity-100">
+												<button
+													type="button"
+													onClick={() => moveSectionOrder(index, "up")}
+													disabled={index === 0}
+													className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
+													title="上移"
+													aria-label="上移"
+												>
+													<ArrowUp size={14} />
+												</button>
+												<button
+													type="button"
+													onClick={() => moveSectionOrder(index, "down")}
+													disabled={index === data.sectionOrder.length - 1}
+													className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
+													title="下移"
+													aria-label="下移"
+												>
+													<ArrowDown size={14} />
+												</button>
+											</div>
+										</div>
+								)}
+							</SortableItemWithHandle>
+								);
+							})}
+						</div>
+					</SortableContext>
+				</DndContext>
 				<label className="mt-3 flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
 					<span className="flex items-center gap-2">
 						<span className="text-slate-400">
@@ -569,37 +657,61 @@ const ResumeEditor = ({
 			title={getSectionTitle("skills")}
 			action={<AddButton title="添加技能分类" onClick={addSkill} />}
 		>
-			<div className="space-y-3">
-				{data.skills.map((skill, index) => (
-					<ItemEditor
-						key={skill.id}
-						title={skill.label || `分类 ${index + 1}`}
-						index={index}
-						total={data.skills.length}
-						onMove={(direction) => moveSkillItem(index, direction)}
-						onRemove={() => removeSkill(skill.id)}
-					>
-						<InputGroup
-							label="分类名称"
-							value={skill.label}
-							onChange={(value) => updateSkill(skill.id, "label", value)}
-							placeholder="例：核心能力"
-						/>
-						<InputGroup
-							label="内容"
-							value={skill.content}
-							onChange={(value) => updateSkill(skill.id, "content", value)}
-							placeholder="例：**JavaScript**, TypeScript, React"
-						/>
-					</ItemEditor>
-				))}
-				{data.skills.length === 0 && (
-					<EmptyState
-						text="暂无技能分类"
-						action={<AddButton title="添加技能分类" onClick={addSkill} />}
-					/>
-				)}
-			</div>
+			<DndContext
+				sensors={dndSensors}
+				collisionDetection={closestCenter}
+				onDragEnd={handleItemsDragEnd(data.skills, "skills")}
+			>
+				<SortableContext
+					items={data.skills.map((s) => s.id)}
+					strategy={verticalListSortingStrategy}
+				>
+					<div className="space-y-3">
+						{data.skills.map((skill, index) => (
+							<SortableItemWithHandle key={skill.id} id={skill.id}>
+								{(dragHandle) => (
+									<div className="group border-t border-slate-100 px-1 py-3 first:border-t-0">
+										<div className="mb-2 flex items-center justify-between gap-2">
+											<div className="flex min-w-0 items-center gap-1">
+												<DragHandle {...dragHandle} />
+												<span className="min-w-0 truncate text-xs font-medium text-slate-400">
+													{skill.label || `分类 ${index + 1}`}
+												</span>
+											</div>
+											<ItemActions
+												index={index}
+												total={data.skills.length}
+												onMove={(direction) => moveSkillItem(index, direction)}
+												onRemove={() => removeSkill(skill.id)}
+											/>
+										</div>
+										<div className="pl-8">
+											<InputGroup
+												label="分类名称"
+												value={skill.label}
+												onChange={(value) => updateSkill(skill.id, "label", value)}
+												placeholder="例：核心能力"
+											/>
+											<InputGroup
+												label="内容"
+												value={skill.content}
+												onChange={(value) => updateSkill(skill.id, "content", value)}
+												placeholder="例：**JavaScript**, TypeScript, React"
+											/>
+										</div>
+									</div>
+								)}
+							</SortableItemWithHandle>
+						))}
+						{data.skills.length === 0 && (
+							<EmptyState
+								text="暂无技能分类"
+								action={<AddButton title="添加技能分类" onClick={addSkill} />}
+							/>
+						)}
+					</div>
+				</SortableContext>
+			</DndContext>
 		</PanelBlock>
 	);
 
@@ -620,89 +732,113 @@ const ResumeEditor = ({
 				/>
 			}
 		>
-			<div className="space-y-3">
-				{data.experience.map((experience, index) => (
-					<ItemEditor
-						key={experience.id}
-						title={experience.company || `经历 ${index + 1}`}
-						index={index}
-						total={data.experience.length}
-						onMove={(direction) => moveExperienceItem(index, direction)}
-						onRemove={() => removeItem("experience", experience.id)}
-					>
-						<InputGroup
-							label="公司"
-							value={experience.company}
-							onChange={(value) =>
-								updateArrayItem<Experience>(
-									"experience",
-									experience.id,
-									"company",
-									value,
-								)
-							}
-						/>
-						<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-							<InputGroup
-								label="职位"
-								value={experience.role}
-								onChange={(value) =>
-									updateArrayItem<Experience>(
-										"experience",
-										experience.id,
-										"role",
-										value,
-									)
+			<DndContext
+				sensors={dndSensors}
+				collisionDetection={closestCenter}
+				onDragEnd={handleItemsDragEnd(data.experience, "experience")}
+			>
+				<SortableContext
+					items={data.experience.map((e) => e.id)}
+					strategy={verticalListSortingStrategy}
+				>
+					<div className="space-y-3">
+						{data.experience.map((experience, index) => (
+							<SortableItemWithHandle key={experience.id} id={experience.id}>
+								{(dragHandle) => (
+									<div className="group border-t border-slate-100 px-1 py-3 first:border-t-0">
+										<div className="mb-2 flex items-center justify-between gap-2">
+											<div className="flex min-w-0 items-center gap-1">
+												<DragHandle {...dragHandle} />
+												<span className="min-w-0 truncate text-xs font-medium text-slate-400">
+													{experience.company || `经历 ${index + 1}`}
+												</span>
+											</div>
+											<ItemActions
+												index={index}
+												total={data.experience.length}
+												onMove={(direction) => moveExperienceItem(index, direction)}
+												onRemove={() => removeItem("experience", experience.id)}
+											/>
+										</div>
+										<div className="pl-8">
+											<InputGroup
+												label="公司"
+												value={experience.company}
+												onChange={(value) =>
+													updateArrayItem<Experience>(
+														"experience",
+														experience.id,
+														"company",
+														value,
+													)
+												}
+											/>
+											<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+												<InputGroup
+													label="职位"
+													value={experience.role}
+													onChange={(value) =>
+														updateArrayItem<Experience>(
+															"experience",
+															experience.id,
+															"role",
+															value,
+														)
+													}
+												/>
+												<InputGroup
+													label="时间"
+													value={experience.date}
+													onChange={(value) =>
+														updateArrayItem<Experience>(
+															"experience",
+															experience.id,
+															"date",
+															value,
+														)
+													}
+												/>
+											</div>
+											<InputGroup
+												type="textarea"
+												label="详情"
+												value={experience.details}
+												onChange={(value) =>
+													updateArrayItem<Experience>(
+														"experience",
+														experience.id,
+														"details",
+														value,
+													)
+												}
+												placeholder="每行一条经历亮点"
+											/>
+										</div>
+									</div>
+								)}
+							</SortableItemWithHandle>
+						))}
+						{data.experience.length === 0 && (
+							<EmptyState
+								text="暂无工作经历"
+								action={
+									<AddButton
+										title="添加工作经历"
+										onClick={() =>
+											addItem<Experience>("experience", {
+												company: "新公司",
+												role: "职位",
+												date: "时间",
+												details: "",
+											})
+										}
+									/>
 								}
 							/>
-							<InputGroup
-								label="时间"
-								value={experience.date}
-								onChange={(value) =>
-									updateArrayItem<Experience>(
-										"experience",
-										experience.id,
-										"date",
-										value,
-									)
-								}
-							/>
-						</div>
-						<InputGroup
-							type="textarea"
-							label="详情"
-							value={experience.details}
-							onChange={(value) =>
-								updateArrayItem<Experience>(
-									"experience",
-									experience.id,
-									"details",
-									value,
-								)
-							}
-							placeholder="每行一条经历亮点"
-						/>
-					</ItemEditor>
-				))}
-				{data.experience.length === 0 && (
-					<EmptyState
-						text="暂无工作经历"
-						action={
-							<AddButton
-								title="添加工作经历"
-								onClick={() =>
-									addItem<Experience>("experience", {
-										company: "新公司",
-										role: "职位",
-										date: "时间",
-										details: "",
-									})
-								}
-							/>
-						}
-					/>
-				)}
-			</div>
+						)}
+					</div>
+				</SortableContext>
+			</DndContext>
 		</PanelBlock>
 	);
 
@@ -725,115 +861,139 @@ const ResumeEditor = ({
 				/>
 			}
 		>
-			<div className="space-y-3">
-				{data.projects.map((project, index) => (
-					<ItemEditor
-						key={project.id}
-						title={project.name || `项目 ${index + 1}`}
-						index={index}
-						total={data.projects.length}
-						onMove={(direction) => moveProjectItem(index, direction)}
-						onRemove={() => removeItem("projects", project.id)}
-					>
-						<InputGroup
-							label="项目名"
-							value={project.name}
-							onChange={(value) =>
-								updateArrayItem<Project>("projects", project.id, "name", value)
-							}
-						/>
-						<div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
-							<InputGroup
-								label="技术标签"
-								value={project.tags}
-								onChange={(value) =>
-									updateArrayItem<Project>(
-										"projects",
-										project.id,
-										"tags",
-										value,
-									)
+			<DndContext
+				sensors={dndSensors}
+				collisionDetection={closestCenter}
+				onDragEnd={handleItemsDragEnd(data.projects, "projects")}
+			>
+				<SortableContext
+					items={data.projects.map((p) => p.id)}
+					strategy={verticalListSortingStrategy}
+				>
+					<div className="space-y-3">
+						{data.projects.map((project, index) => (
+							<SortableItemWithHandle key={project.id} id={project.id}>
+								{(dragHandle) => (
+									<div className="group border-t border-slate-100 px-1 py-3 first:border-t-0">
+										<div className="mb-2 flex items-center justify-between gap-2">
+											<div className="flex min-w-0 items-center gap-1">
+												<DragHandle {...dragHandle} />
+												<span className="min-w-0 truncate text-xs font-medium text-slate-400">
+													{project.name || `项目 ${index + 1}`}
+												</span>
+											</div>
+											<ItemActions
+												index={index}
+												total={data.projects.length}
+												onMove={(direction) => moveProjectItem(index, direction)}
+												onRemove={() => removeItem("projects", project.id)}
+											/>
+										</div>
+										<div className="pl-8">
+											<InputGroup
+												label="项目名"
+												value={project.name}
+												onChange={(value) =>
+													updateArrayItem<Project>("projects", project.id, "name", value)
+												}
+											/>
+											<div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
+												<InputGroup
+													label="技术标签"
+													value={project.tags}
+													onChange={(value) =>
+														updateArrayItem<Project>(
+															"projects",
+															project.id,
+															"tags",
+															value,
+														)
+													}
+												/>
+												<InputGroup
+													label="时间"
+													value={project.date}
+													onChange={(value) =>
+														updateArrayItem<Project>(
+															"projects",
+															project.id,
+															"date",
+															value,
+														)
+													}
+													placeholder="例：2024.03"
+												/>
+											</div>
+											<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+												<InputGroup
+													label="Demo"
+													value={project.link}
+													onChange={(value) =>
+														updateArrayItem<Project>(
+															"projects",
+															project.id,
+															"link",
+															value,
+														)
+													}
+													placeholder="不带 https://"
+												/>
+												<InputGroup
+													label="源码"
+													value={project.source}
+													onChange={(value) =>
+														updateArrayItem<Project>(
+															"projects",
+															project.id,
+															"source",
+															value,
+														)
+													}
+													placeholder="不带 https://"
+												/>
+											</div>
+											<InputGroup
+												type="textarea"
+												label="描述"
+												value={project.description}
+												onChange={(value) =>
+													updateArrayItem<Project>(
+														"projects",
+														project.id,
+														"description",
+														value,
+													)
+												}
+												placeholder="每行一条项目亮点"
+											/>
+										</div>
+									</div>
+								)}
+							</SortableItemWithHandle>
+						))}
+						{data.projects.length === 0 && (
+							<EmptyState
+								text="暂无项目经历"
+								action={
+									<AddButton
+										title="添加项目"
+										onClick={() =>
+											addItem<Project>("projects", {
+												name: "新项目",
+												date: "",
+												tags: "",
+												link: "",
+												source: "",
+												description: "",
+											})
+										}
+									/>
 								}
 							/>
-							<InputGroup
-								label="时间"
-								value={project.date}
-								onChange={(value) =>
-									updateArrayItem<Project>(
-										"projects",
-										project.id,
-										"date",
-										value,
-									)
-								}
-								placeholder="例：2024.03"
-							/>
-						</div>
-						<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-							<InputGroup
-								label="Demo"
-								value={project.link}
-								onChange={(value) =>
-									updateArrayItem<Project>(
-										"projects",
-										project.id,
-										"link",
-										value,
-									)
-								}
-								placeholder="不带 https://"
-							/>
-							<InputGroup
-								label="源码"
-								value={project.source}
-								onChange={(value) =>
-									updateArrayItem<Project>(
-										"projects",
-										project.id,
-										"source",
-										value,
-									)
-								}
-								placeholder="不带 https://"
-							/>
-						</div>
-						<InputGroup
-							type="textarea"
-							label="描述"
-							value={project.description}
-							onChange={(value) =>
-								updateArrayItem<Project>(
-									"projects",
-									project.id,
-									"description",
-									value,
-								)
-							}
-							placeholder="每行一条项目亮点"
-						/>
-					</ItemEditor>
-				))}
-				{data.projects.length === 0 && (
-					<EmptyState
-						text="暂无项目经历"
-						action={
-							<AddButton
-								title="添加项目"
-								onClick={() =>
-									addItem<Project>("projects", {
-										name: "新项目",
-										date: "",
-										tags: "",
-										link: "",
-										source: "",
-										description: "",
-									})
-								}
-							/>
-						}
-					/>
-				)}
-			</div>
+						)}
+					</div>
+				</SortableContext>
+			</DndContext>
 		</PanelBlock>
 	);
 
@@ -842,44 +1002,68 @@ const ResumeEditor = ({
 			title={getSectionTitle("education")}
 			action={<AddButton title="添加教育经历" onClick={addEducation} />}
 		>
-			<div className="space-y-3">
-				{data.education.map((education, index) => (
-					<ItemEditor
-						key={education.id}
-						title={education.school || `教育 ${index + 1}`}
-						index={index}
-						total={data.education.length}
-						onMove={(direction) => moveEducationItem(index, direction)}
-						onRemove={() => removeEducation(education.id)}
-					>
-						<InputGroup
-							label="学校"
-							value={education.school}
-							onChange={(value) =>
-								updateEducation(education.id, "school", value)
-							}
-						/>
-						<InputGroup
-							label="学位"
-							value={education.degree}
-							onChange={(value) =>
-								updateEducation(education.id, "degree", value)
-							}
-						/>
-						<InputGroup
-							label="时间"
-							value={education.date}
-							onChange={(value) => updateEducation(education.id, "date", value)}
-						/>
-					</ItemEditor>
-				))}
-				{data.education.length === 0 && (
-					<EmptyState
-						text="暂无教育经历"
-						action={<AddButton title="添加教育经历" onClick={addEducation} />}
-					/>
-				)}
-			</div>
+			<DndContext
+				sensors={dndSensors}
+				collisionDetection={closestCenter}
+				onDragEnd={handleItemsDragEnd(data.education, "education")}
+			>
+				<SortableContext
+					items={data.education.map((e) => e.id)}
+					strategy={verticalListSortingStrategy}
+				>
+					<div className="space-y-3">
+						{data.education.map((education, index) => (
+							<SortableItemWithHandle key={education.id} id={education.id}>
+								{(dragHandle) => (
+									<div className="group border-t border-slate-100 px-1 py-3 first:border-t-0">
+										<div className="mb-2 flex items-center justify-between gap-2">
+											<div className="flex min-w-0 items-center gap-1">
+												<DragHandle {...dragHandle} />
+												<span className="min-w-0 truncate text-xs font-medium text-slate-400">
+													{education.school || `教育 ${index + 1}`}
+												</span>
+											</div>
+											<ItemActions
+												index={index}
+												total={data.education.length}
+												onMove={(direction) => moveEducationItem(index, direction)}
+												onRemove={() => removeEducation(education.id)}
+											/>
+										</div>
+										<div className="pl-8">
+											<InputGroup
+												label="学校"
+												value={education.school}
+												onChange={(value) =>
+													updateEducation(education.id, "school", value)
+												}
+											/>
+											<InputGroup
+												label="学位"
+												value={education.degree}
+												onChange={(value) =>
+													updateEducation(education.id, "degree", value)
+												}
+											/>
+											<InputGroup
+												label="时间"
+												value={education.date}
+												onChange={(value) => updateEducation(education.id, "date", value)}
+											/>
+										</div>
+									</div>
+								)}
+							</SortableItemWithHandle>
+						))}
+						{data.education.length === 0 && (
+							<EmptyState
+								text="暂无教育经历"
+								action={<AddButton title="添加教育经历" onClick={addEducation} />}
+							/>
+						)}
+					</div>
+				</SortableContext>
+			</DndContext>
 		</PanelBlock>
 	);
 
