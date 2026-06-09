@@ -3,9 +3,11 @@ import {
 	DEFAULT_RESUME_PAGE_MARGIN_MM,
 	normalizeResumeFontSize,
 	normalizeResumePageMargin,
+	normalizeResumeFontFamily,
 	normalizeResumeSectionPreferences,
 	type ResumeFontSizePt,
 	type ResumePageMarginMm,
+	type ResumeFontFamily,
 	type ResumeSectionPreferences,
 } from "./resumeStyle";
 import { DEFAULT_THEME_ID, isThemeId } from "./themes";
@@ -25,6 +27,7 @@ export interface ResumeBackup {
 		themeId: ThemeId;
 		fontSizePt: ResumeFontSizePt;
 		pageMarginMm: ResumePageMarginMm;
+		fontFamily: ResumeFontFamily;
 		sectionIcons: SectionIconVisibility;
 		sectionPreferences: ResumeSectionPreferences;
 	};
@@ -35,6 +38,7 @@ export interface ImportedResumeBackup {
 	themeId?: ThemeId;
 	fontSizePt?: ResumeFontSizePt;
 	pageMarginMm?: ResumePageMarginMm;
+	fontFamily?: ResumeFontFamily;
 	sectionIcons?: SectionIconVisibility;
 	sectionPreferences?: ResumeSectionPreferences;
 }
@@ -44,6 +48,7 @@ export function createResumeBackup(
 	themeId: ThemeId,
 	fontSizePt: ResumeFontSizePt,
 	pageMarginMm: ResumePageMarginMm,
+	fontFamily: ResumeFontFamily,
 	sectionIcons: SectionIconVisibility,
 	sectionPreferences: ResumeSectionPreferences,
 ): ResumeBackup {
@@ -54,6 +59,7 @@ export function createResumeBackup(
 			themeId,
 			fontSizePt,
 			pageMarginMm,
+			fontFamily,
 			sectionIcons,
 			sectionPreferences,
 		},
@@ -70,6 +76,7 @@ export function normalizeResumeBackup(raw: unknown): ImportedResumeBackup {
 	const themeValue = appearance.themeId ?? raw.themeId;
 	const fontSizeValue = appearance.fontSizePt ?? raw.fontSizePt;
 	const pageMarginValue = appearance.pageMarginMm ?? raw.pageMarginMm;
+	const fontFamilyValue = appearance.fontFamily ?? raw.fontFamily;
 	const sectionIconsValue = appearance.sectionIcons ?? raw.sectionIcons;
 	const sectionPreferencesValue =
 		appearance.sectionPreferences ?? raw.sectionPreferences;
@@ -96,6 +103,10 @@ export function normalizeResumeBackup(raw: unknown): ImportedResumeBackup {
 		result.pageMarginMm = normalizeResumePageMargin(
 			pageMarginValue ?? DEFAULT_RESUME_PAGE_MARGIN_MM,
 		);
+	}
+
+	if (fontFamilyValue !== undefined) {
+		result.fontFamily = normalizeResumeFontFamily(fontFamilyValue);
 	}
 
 	if (sectionIconsValue !== undefined) {

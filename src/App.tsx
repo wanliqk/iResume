@@ -22,6 +22,7 @@ import {
 	type PointerEvent as ReactPointerEvent,
 	type ReactNode,
 } from "react";
+import FontFamilyControl from "./components/FontFamilyControl";
 import FontSizeControl from "./components/FontSizeControl";
 import PageMarginControl from "./components/PageMarginControl";
 import PreviewPageModeControl from "./components/PreviewPageModeControl";
@@ -74,10 +75,12 @@ import {
 	DEFAULT_SECTION_PREFERENCES,
 	DEFAULT_RESUME_FONT_SIZE_PT,
 	DEFAULT_RESUME_PAGE_MARGIN_MM,
+	DEFAULT_RESUME_FONT_FAMILY,
 	normalizeResumeFontSize,
 	normalizeResumePageMargin,
 	type ResumeFontSizePt,
 	type ResumePageMarginMm,
+	type ResumeFontFamily,
 	type ResumeSectionPreferences,
 } from "./data/resumeStyle";
 import {
@@ -522,6 +525,7 @@ function App() {
 	const {
 		themeId,
 		fontSizePt,
+		fontFamily,
 		pageMarginMm,
 		sectionIcons,
 		sectionPreferences,
@@ -1100,6 +1104,13 @@ function App() {
 		}));
 	};
 
+	const handleFontFamilyChange = (nextFontFamily: ResumeFontFamily) => {
+		updateActiveDocument((document) => ({
+			...document,
+			appearance: { ...document.appearance, fontFamily: nextFontFamily },
+		}));
+	};
+
 	const handlePageMarginChange = (nextPageMargin: ResumePageMarginMm) => {
 		updateActiveDocument((document) => ({
 			...document,
@@ -1400,6 +1411,7 @@ function App() {
 					themeId: DEFAULT_THEME_ID,
 					fontSizePt: DEFAULT_RESUME_FONT_SIZE_PT,
 					pageMarginMm: DEFAULT_RESUME_PAGE_MARGIN_MM,
+					fontFamily: DEFAULT_RESUME_FONT_FAMILY,
 					sectionIcons: getDefaultSectionIconVisibility(DEFAULT_THEME_ID),
 					sectionPreferences: DEFAULT_SECTION_PREFERENCES,
 				},
@@ -1468,6 +1480,7 @@ function App() {
 			themeId,
 			fontSizePt,
 			pageMarginMm,
+			fontFamily,
 			sectionIcons,
 			sectionPreferences,
 		);
@@ -1556,6 +1569,7 @@ function App() {
 							themeId: importedThemeId,
 							fontSizePt: imported.fontSizePt ?? fontSizePt,
 							pageMarginMm: imported.pageMarginMm ?? pageMarginMm,
+							fontFamily: imported.fontFamily ?? fontFamily,
 							sectionIcons:
 								imported.sectionIcons ??
 								getDefaultSectionIconVisibility(importedThemeId),
@@ -1665,6 +1679,10 @@ function App() {
 											favoriteThemeIds={favoriteThemeIds}
 											onChange={handleThemeChange}
 											onToggleFavorite={handleToggleFavoriteTheme}
+										/>
+										<FontFamilyControl
+											value={fontFamily}
+											onChange={handleFontFamilyChange}
 										/>
 										<FontSizeControl
 											value={fontSizePt}
@@ -1854,6 +1872,7 @@ function App() {
 												data={resumeData}
 												themeId={themeId}
 												fontSizePt={fontSizePt}
+												fontFamily={fontFamily}
 												pageMarginMm={pageMarginMm}
 												sectionIcons={sectionIcons}
 												sectionPreferences={sectionPreferences}
@@ -1886,6 +1905,7 @@ function App() {
 													data={resumeData}
 													themeId={themeId}
 													fontSizePt={fontSizePt}
+													fontFamily={fontFamily}
 													pageMarginMm={pageMarginMm}
 													sectionIcons={sectionIcons}
 													sectionPreferences={sectionPreferences}
@@ -1913,6 +1933,7 @@ function App() {
 																	data={resumeData}
 																	themeId={themeId}
 																	fontSizePt={fontSizePt}
+																	fontFamily={fontFamily}
 																	pageMarginMm={pageMarginMm}
 																	sectionIcons={sectionIcons}
 																	sectionPreferences={sectionPreferences}
