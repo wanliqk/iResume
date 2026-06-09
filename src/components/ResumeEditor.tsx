@@ -18,6 +18,8 @@ import {
 	PointerSensor,
 	useSensor,
 	useSensors,
+	type DraggableAttributes,
+	type DraggableSyntheticListeners,
 	type DragEndEvent,
 } from "@dnd-kit/core";
 import {
@@ -135,7 +137,9 @@ const SortableItemWithHandle = ({
 	id: string | number;
 	children: (dragHandleProps: {
 		activatorRef: (node: HTMLElement | null) => void;
-	} & Record<string, unknown>) => ReactNode;
+		attributes: DraggableAttributes;
+		listeners: DraggableSyntheticListeners | undefined;
+	}) => ReactNode;
 }) => {
 	const {
 		attributes,
@@ -153,25 +157,36 @@ const SortableItemWithHandle = ({
 		zIndex: isDragging ? 50 : undefined,
 	};
 	return (
-		<div ref={setNodeRef} style={style} {...attributes}>
-			{children({ activatorRef: setActivatorNodeRef, ...listeners })}
+		<div ref={setNodeRef} style={style}>
+			{children({
+				activatorRef: setActivatorNodeRef,
+				attributes,
+				listeners,
+			})}
 		</div>
 	);
 };
 
 const DragHandle = ({
 	activatorRef,
-	...listeners
+	attributes,
+	listeners,
 }: {
 	activatorRef: (node: HTMLElement | null) => void;
-} & Record<string, unknown>) => (
-	<span
+	attributes: DraggableAttributes;
+	listeners: DraggableSyntheticListeners | undefined;
+}) => (
+	<button
+		type="button"
 		ref={activatorRef}
+		{...attributes}
 		{...listeners}
-		className="flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded text-slate-300 transition-colors hover:text-slate-500 active:cursor-grabbing"
+		className="flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:cursor-grabbing"
+		title="拖拽排序"
+		aria-label="拖拽排序"
 	>
 		<GripVertical size={14} />
-	</span>
+	</button>
 );
 
 const ItemActions = ({
@@ -488,6 +503,35 @@ const ResumeEditor = ({
 		}
 	};
 
+	const renderSectionOrderButton = (key: SectionKey, active: boolean) => (
+		<button
+			type="button"
+			onClick={() => onActiveSectionChange(key)}
+			className={`flex min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 py-2 text-left transition ${
+				active
+					? "border-blue-200 bg-blue-50 text-blue-700"
+					: "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
+			}`}
+			aria-pressed={active}
+		>
+			<span
+				className={`flex h-7 w-7 shrink-0 items-center justify-center rounded ${
+					active ? "bg-white text-blue-600" : "bg-white text-slate-400"
+				}`}
+			>
+				{sectionIconNodes[key]}
+			</span>
+			<span className="min-w-0 flex-1">
+				<span className="block truncate text-sm font-semibold">
+					{getSectionTitle(key)}
+				</span>
+				<span className="block text-xs text-slate-400">
+					{getSectionSummary(key)}
+				</span>
+			</span>
+		</button>
+	);
+
 	const renderPersonalPanel = () => (
 		<PanelBlock title="个人信息">
 			<div className="grid grid-cols-1 gap-2">
@@ -550,83 +594,70 @@ const ResumeEditor = ({
 						{data.sectionOrder.length}
 					</span>
 				}
-			>
-				<DndContext
-					sensors={dndSensors}
-					collisionDetection={closestCenter}
-					onDragEnd={handleSectionDragEnd}
 				>
-					<SortableContext
-						items={data.sectionOrder}
-						strategy={verticalListSortingStrategy}
-					>
-						<div className="space-y-1.5">
-							{data.sectionOrder.map((key, index) => {
-								const active = key === activeSection;
-								return (
-									<SortableItemWithHandle key={key} id={key}>
-								{(dragHandle) => (
-									<div className="group flex items-center gap-1.5">
-										<DragHandle {...dragHandle} />
-											<button
-												type="button"
-												onClick={() => onActiveSectionChange(key)}
-												className={`flex min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 py-2 text-left transition ${
-													active
-														? "border-blue-200 bg-blue-50 text-blue-700"
-														: "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
-												}`}
-												aria-pressed={active}
-											>
-												<span
-													className={`flex h-7 w-7 shrink-0 items-center justify-center rounded ${
-														active ? "bg-white text-blue-600" : "bg-white text-slate-400"
-													}`}
-												>
-													{sectionIconNodes[key]}
-												</span>
-												<span className="min-w-0 flex-1">
-													<span className="block truncate text-sm font-semibold">
-														{getSectionTitle(key)}
-													</span>
-													<span className="block text-xs text-slate-400">
-														{getSectionSummary(key)}
-													</span>
-												</span>
-											</button>
-											<div className="flex shrink-0 gap-0.5 opacity-60 transition group-hover:opacity-100">
-												<button
-													type="button"
-													onClick={() => moveSectionOrder(index, "up")}
-													disabled={index === 0}
-													className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
-													title="上移"
-													aria-label="上移"
-												>
-													<ArrowUp size={14} />
-												</button>
-												<button
-													type="button"
-													onClick={() => moveSectionOrder(index, "down")}
-													disabled={index === data.sectionOrder.length - 1}
-													className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
-													title="下移"
-													aria-label="下移"
-												>
-													<ArrowDown size={14} />
-												</button>
-											</div>
-										</div>
-								)}
-							</SortableItemWithHandle>
-								);
-							})}
-						</div>
-					</SortableContext>
-				</DndContext>
-				<label className="mt-3 flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
-					<span className="flex items-center gap-2">
-						<span className="text-slate-400">
+					<div className="hidden sm:block">
+						<DndContext
+							sensors={dndSensors}
+							collisionDetection={closestCenter}
+							onDragEnd={handleSectionDragEnd}
+						>
+							<SortableContext
+								items={data.sectionOrder}
+								strategy={verticalListSortingStrategy}
+							>
+								<div className="space-y-1.5">
+									{data.sectionOrder.map((key) => {
+										const active = key === activeSection;
+										return (
+											<SortableItemWithHandle key={key} id={key}>
+												{(dragHandle) => (
+													<div className="group flex items-center gap-1.5">
+														<DragHandle {...dragHandle} />
+														{renderSectionOrderButton(key, active)}
+													</div>
+												)}
+											</SortableItemWithHandle>
+										);
+									})}
+								</div>
+							</SortableContext>
+						</DndContext>
+					</div>
+					<div className="space-y-1.5 sm:hidden">
+						{data.sectionOrder.map((key, index) => {
+							const active = key === activeSection;
+							return (
+								<div key={key} className="group flex items-center gap-1.5">
+									{renderSectionOrderButton(key, active)}
+									<div className="flex shrink-0 gap-0.5">
+										<button
+											type="button"
+											onClick={() => moveSectionOrder(index, "up")}
+											disabled={index === 0}
+											className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
+											title="上移"
+											aria-label="上移"
+										>
+											<ArrowUp size={14} />
+										</button>
+										<button
+											type="button"
+											onClick={() => moveSectionOrder(index, "down")}
+											disabled={index === data.sectionOrder.length - 1}
+											className="flex h-8 w-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-25"
+											title="下移"
+											aria-label="下移"
+										>
+											<ArrowDown size={14} />
+										</button>
+									</div>
+								</div>
+							);
+						})}
+					</div>
+					<label className="mt-3 flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+						<span className="flex items-center gap-2">
+							<span className="text-slate-400">
 							{sectionIconNodes[activeSection]}
 						</span>
 						<span>标题图标</span>
