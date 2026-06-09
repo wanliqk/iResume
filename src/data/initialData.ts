@@ -11,12 +11,31 @@ export const initialResumeState: ResumeData = {
 		github: "github.com/linxiaoming",
 		website: "linxiaoming.dev",
 	},
-	sectionOrder: ["skills", "experience", "projects", "education", "other"],
+	sectionOrder: [
+		"skills",
+		"experience",
+		"projects",
+		"education",
+		"awards",
+		"campus",
+		"other",
+	],
+	sectionVisibility: {
+		skills: true,
+		experience: true,
+		projects: true,
+		education: true,
+		awards: false,
+		campus: false,
+		other: true,
+	},
 	sectionTitles: {
 		skills: "专业技能",
 		experience: "工作经历",
 		projects: "项目经验 & 开源贡献",
 		education: "教育背景",
+		awards: "获奖奖励",
+		campus: "校园经历",
 		other: "其他补充",
 	},
 	skills: [
@@ -91,6 +110,26 @@ export const initialResumeState: ResumeData = {
 			school: "某某大学",
 			degree: "计算机科学与技术 (本科)",
 			date: "2014.09 - 2018.06",
+		},
+	],
+	awards: [
+		{
+			id: 1,
+			title: "全国大学生软件设计竞赛一等奖",
+			subtitle: "中国软件行业协会",
+			date: "2017.11",
+			details:
+				"负责前端交互与性能优化，作品在 120+ 支队伍中获得一等奖。",
+		},
+	],
+	campus: [
+		{
+			id: 1,
+			title: "校学生科技协会",
+			subtitle: "前端负责人",
+			date: "2016.09 - 2018.06",
+			details:
+				"组织 8 场技术分享与项目实践，带领团队完成校园活动报名系统。",
 		},
 	],
 	other:

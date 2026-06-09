@@ -5,9 +5,11 @@ import type {
 	PersonalInfo,
 	Project,
 	ResumeData,
+	SectionEntry,
 	SectionKey,
 	SectionIconVisibility,
 	SectionTitles,
+	SectionVisibility,
 	SkillItem,
 } from "../types/resume";
 
@@ -16,6 +18,8 @@ export const ALL_SECTION_KEYS: SectionKey[] = [
 	"experience",
 	"projects",
 	"education",
+	"awards",
+	"campus",
 	"other",
 ];
 
@@ -70,8 +74,23 @@ function normalizeSectionTitles(value: unknown): SectionTitles {
 		experience: readString(raw.experience, defaults.experience),
 		projects: readString(raw.projects, defaults.projects),
 		education: readString(raw.education, defaults.education),
+		awards: readString(raw.awards, defaults.awards),
+		campus: readString(raw.campus, defaults.campus),
 		other: readString(raw.other, defaults.other),
 	};
+}
+
+function normalizeSectionVisibility(value: unknown): SectionVisibility {
+	const raw = isRecord(value) ? value : {};
+	const defaults = initialResumeState.sectionVisibility;
+
+	return ALL_SECTION_KEYS.reduce(
+		(result, key) => ({
+			...result,
+			[key]: typeof raw[key] === "boolean" ? raw[key] : defaults[key],
+		}),
+		{} as SectionVisibility,
+	);
 }
 
 function normalizeSectionOrder(value: unknown): SectionKey[] {
@@ -178,17 +197,41 @@ function normalizeProjects(value: unknown): Project[] {
 	});
 }
 
+function normalizeSectionEntries(
+	value: unknown,
+	fallback: SectionEntry[],
+): SectionEntry[] {
+	if (!Array.isArray(value)) {
+		return fallback.map((item) => ({ ...item }));
+	}
+
+	const usedIds = new Set<number>();
+	return value.map((item, index) => {
+		const raw = isRecord(item) ? item : {};
+		return {
+			id: readId(raw.id, index + 1, usedIds),
+			title: readString(raw.title),
+			subtitle: readString(raw.subtitle),
+			date: readString(raw.date),
+			details: readString(raw.details),
+		};
+	});
+}
+
 export function normalizeResumeData(raw: unknown): ResumeData {
 	const data = isRecord(raw) ? raw : {};
 
 	return {
 		personal: normalizePersonal(data.personal),
 		sectionTitles: normalizeSectionTitles(data.sectionTitles),
+		sectionVisibility: normalizeSectionVisibility(data.sectionVisibility),
 		sectionOrder: normalizeSectionOrder(data.sectionOrder),
 		skills: normalizeSkills(data.skills),
 		experience: normalizeExperience(data.experience),
 		projects: normalizeProjects(data.projects),
 		education: normalizeEducation(data.education),
+		awards: normalizeSectionEntries(data.awards, initialResumeState.awards),
+		campus: normalizeSectionEntries(data.campus, initialResumeState.campus),
 		other: readString(data.other, initialResumeState.other),
 	};
 }

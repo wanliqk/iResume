@@ -1,4 +1,5 @@
 import {
+	Award,
 	Briefcase,
 	Calendar,
 	Code,
@@ -11,6 +12,7 @@ import {
 	MapPin,
 	MoreHorizontal,
 	Phone,
+	School,
 } from "lucide-react";
 import React, { forwardRef } from "react";
 import {
@@ -32,6 +34,7 @@ import type {
 	Experience,
 	Project,
 	ResumeData,
+	SectionEntry,
 	SectionIconVisibility,
 	SectionKey,
 	SkillItem,
@@ -104,6 +107,8 @@ const sectionIconNodes: Record<SectionKey, React.ReactNode> = {
 	experience: <Briefcase size={13} />,
 	projects: <Folder size={13} />,
 	education: <GraduationCap size={13} />,
+	awards: <Award size={13} />,
+	campus: <School size={13} />,
 	other: <MoreHorizontal size={13} />,
 };
 
@@ -115,6 +120,12 @@ const splitSkillContent = (content: string) =>
 
 const hasSkillContent = (skill: SkillItem) =>
 	skill.label.trim() || skill.content.trim();
+
+const hasSectionEntryContent = (item: SectionEntry) =>
+	item.title.trim() ||
+	item.subtitle.trim() ||
+	item.date.trim() ||
+	item.details.trim();
 
 const BannerLink = ({ href, text, icon, accentClass }: BannerLinkProps) => {
 	const className = `flex items-center gap-1.5 text-slate-300 hover:opacity-80 ${accentClass ?? "hover:text-amber-300"}`;
@@ -195,11 +206,19 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 
 		const sectionVisible: Record<SectionKey, boolean> = {
 			skills:
-				data.skills.length > 0 && data.skills.some((skill) => hasSkillContent(skill)),
-			experience: data.experience.length > 0,
-			projects: data.projects.length > 0,
-			education: data.education.length > 0,
-			other: data.other.trim().length > 0,
+				data.sectionVisibility.skills &&
+				data.skills.length > 0 &&
+				data.skills.some((skill) => hasSkillContent(skill)),
+			experience: data.sectionVisibility.experience && data.experience.length > 0,
+			projects: data.sectionVisibility.projects && data.projects.length > 0,
+			education: data.sectionVisibility.education && data.education.length > 0,
+			awards:
+				data.sectionVisibility.awards &&
+				data.awards.some((item) => hasSectionEntryContent(item)),
+			campus:
+				data.sectionVisibility.campus &&
+				data.campus.some((item) => hasSectionEntryContent(item)),
+			other: data.sectionVisibility.other && data.other.trim().length > 0,
 		};
 
 		const visibleOrder = data.sectionOrder.filter((key) => sectionVisible[key]);
@@ -1075,6 +1094,54 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 			</section>
 		);
 
+		const renderSectionEntries = (
+			key: "awards" | "campus",
+			items: SectionEntry[],
+			isLast: boolean,
+		) => (
+			<section key={key} {...getSectionProps(key, isLast)}>
+				{renderSectionHeader(key)}
+				{items.filter(hasSectionEntryContent).map((item) => (
+					<div key={item.id} className={`${spacing.item} last:mb-0`}>
+						<div className="print-item-header mb-1">
+							<div className="flex items-baseline justify-between gap-4">
+								<div className="min-w-0">
+									{item.title.trim() && (
+										<h3 className={`font-bold text-base ${c.heading}`}>
+											{item.title}
+										</h3>
+									)}
+									{item.subtitle.trim() && (
+										<div className={`text-sm font-medium ${c.primary}`}>
+											{item.subtitle}
+										</div>
+									)}
+								</div>
+								{item.date.trim() && (
+									<span className={`shrink-0 text-sm ${c.muted}`}>
+										{item.date}
+									</span>
+								)}
+							</div>
+						</div>
+						{item.details.trim() && (
+							<ul
+								className={`list-disc list-outside ml-4 ${spacing.list} text-sm ${c.body}`}
+							>
+								{renderMarkdownList(item.details)}
+							</ul>
+						)}
+					</div>
+				))}
+			</section>
+		);
+
+		const renderAwards = (isLast: boolean) =>
+			renderSectionEntries("awards", data.awards, isLast);
+
+		const renderCampus = (isLast: boolean) =>
+			renderSectionEntries("campus", data.campus, isLast);
+
 		const renderOtherLines = () =>
 			data.other
 				.split("\n")
@@ -1114,6 +1181,8 @@ const ResumePreview = forwardRef<HTMLDivElement, ResumePreviewProps>(
 			experience: renderExperience,
 			projects: renderProjects,
 			education: renderEducation,
+			awards: renderAwards,
+			campus: renderCampus,
 			other: renderOther,
 		};
 

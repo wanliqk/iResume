@@ -45,12 +45,23 @@ export interface Education {
 	date: string;
 }
 
+// 通用条目区块（获奖、校园经历等）
+export interface SectionEntry {
+	id: number;
+	title: string;
+	subtitle: string;
+	date: string;
+	details: string;
+}
+
 // 各区块自定义标题
 export interface SectionTitles {
 	skills: string;
 	experience: string;
 	projects: string;
 	education: string;
+	awards: string;
+	campus: string;
 	other: string;
 }
 
@@ -60,21 +71,29 @@ export type SectionKey =
 	| "experience"
 	| "projects"
 	| "education"
+	| "awards"
+	| "campus"
 	| "other";
 
 // 控制各区块标题图标是否显示
 export type SectionIconVisibility = Record<SectionKey, boolean>;
 
+// 控制各区块是否显示在简历预览中
+export type SectionVisibility = Record<SectionKey, boolean>;
+
 // 简历数据
 export interface ResumeData {
 	personal: PersonalInfo;
 	sectionTitles: SectionTitles;
+	sectionVisibility: SectionVisibility;
 	// 控制各区块在简历中的显示顺序
 	sectionOrder: SectionKey[];
 	skills: SkillItem[];
 	experience: Experience[];
 	projects: Project[];
 	education: Education[];
+	awards: SectionEntry[];
+	campus: SectionEntry[];
 	// 每行一条，支持 **粗体** 和 [文字](url) 语法
 	other: string;
 }

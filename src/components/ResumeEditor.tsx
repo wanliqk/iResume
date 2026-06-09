@@ -1,12 +1,16 @@
 import {
 	ArrowDown,
 	ArrowUp,
+	Award,
 	BriefcaseBusiness,
+	Eye,
+	EyeOff,
 	FileText,
 	FolderGit2,
 	GraduationCap,
 	GripVertical,
 	Plus,
+	School,
 	Trash2,
 	Wrench,
 } from "lucide-react";
@@ -36,6 +40,7 @@ import type {
 	Experience,
 	Project,
 	ResumeData,
+	SectionEntry,
 	SectionKey,
 	SectionIconVisibility,
 	SkillItem,
@@ -110,6 +115,7 @@ interface ItemActionsProps {
 	total: number;
 	onMove: (direction: "up" | "down") => void;
 	onRemove: () => void;
+	removeConfirmMessage?: string;
 }
 
 const sectionFallbackNames: Record<SectionKey, string> = {
@@ -117,6 +123,8 @@ const sectionFallbackNames: Record<SectionKey, string> = {
 	experience: "工作经历",
 	projects: "项目经历",
 	education: "教育背景",
+	awards: "获奖奖励",
+	campus: "校园经历",
 	other: "其他",
 };
 
@@ -125,6 +133,8 @@ const sectionIconNodes: Record<SectionKey, ReactNode> = {
 	experience: <BriefcaseBusiness size={15} />,
 	projects: <FolderGit2 size={15} />,
 	education: <GraduationCap size={15} />,
+	awards: <Award size={15} />,
+	campus: <School size={15} />,
 	other: <FileText size={15} />,
 };
 
@@ -194,6 +204,7 @@ const ItemActions = ({
 	total,
 	onMove,
 	onRemove,
+	removeConfirmMessage = "确定要删除这条内容吗？",
 }: ItemActionsProps) => (
 	<div className="flex gap-0.5">
 		<button
@@ -218,7 +229,9 @@ const ItemActions = ({
 		</button>
 		<button
 			type="button"
-			onClick={onRemove}
+			onClick={() => {
+				if (window.confirm(removeConfirmMessage)) onRemove();
+			}}
 			className="flex h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
 			title="删除"
 			aria-label="删除"
@@ -313,7 +326,10 @@ const ResumeEditor = ({
 
 	const handleItemsDragEnd = <T extends { id: number }>(
 		items: T[],
-		field: keyof Pick<ResumeData, "skills" | "experience" | "projects" | "education">,
+		field: keyof Pick<
+			ResumeData,
+			"skills" | "experience" | "projects" | "education" | "awards" | "campus"
+		>,
 	) => (event: DragEndEvent) => {
 		const { active, over } = event;
 		if (!over || active.id === over.id) return;
@@ -334,6 +350,13 @@ const ResumeEditor = ({
 		onChange({
 			...data,
 			sectionTitles: { ...data.sectionTitles, [key]: value },
+		});
+	};
+
+	const updateSectionVisibility = (key: SectionKey, visible: boolean) => {
+		onChange({
+			...data,
+			sectionVisibility: { ...data.sectionVisibility, [key]: visible },
 		});
 	};
 
@@ -409,6 +432,37 @@ const ResumeEditor = ({
 		});
 	};
 
+	const updateSectionEntry = (
+		section: "awards" | "campus",
+		id: number,
+		key: keyof SectionEntry,
+		value: string,
+	) => {
+		onChange({
+			...data,
+			[section]: data[section].map((item) =>
+				item.id === id ? { ...item, [key]: value } : item,
+			),
+		});
+	};
+
+	const addSectionEntry = (
+		section: "awards" | "campus",
+		template: Omit<SectionEntry, "id">,
+	) => {
+		onChange({
+			...data,
+			[section]: [...data[section], { ...template, id: createResumeItemId() }],
+		});
+	};
+
+	const removeSectionEntry = (section: "awards" | "campus", id: number) => {
+		onChange({
+			...data,
+			[section]: data[section].filter((item) => item.id !== id),
+		});
+	};
+
 	const updateArrayItem = <T extends Experience | Project>(
 		section: "experience" | "projects",
 		id: number,
@@ -474,6 +528,17 @@ const ResumeEditor = ({
 		});
 	};
 
+	const moveSectionEntry = (
+		section: "awards" | "campus",
+		index: number,
+		direction: "up" | "down",
+	) => {
+		onChange({
+			...data,
+			[section]: moveItem(data[section], index, direction),
+		});
+	};
+
 	const moveSectionOrder = (index: number, direction: "up" | "down") => {
 		const nextOrder = [...data.sectionOrder];
 		const targetIndex = direction === "up" ? index - 1 : index + 1;
@@ -498,9 +563,33 @@ const ResumeEditor = ({
 				return `${data.projects.length} 个项目`;
 			case "education":
 				return `${data.education.length} 段教育`;
+			case "awards":
+				return `${data.awards.length} 项奖励`;
+			case "campus":
+				return `${data.campus.length} 段经历`;
 			case "other":
 				return data.other.trim() ? "已填写" : "空";
 		}
+	};
+
+	const renderSectionVisibilityButton = (key: SectionKey) => {
+		const visible = data.sectionVisibility[key];
+		return (
+			<button
+				type="button"
+				onClick={() => updateSectionVisibility(key, !visible)}
+				className={`flex h-8 w-8 shrink-0 items-center justify-center rounded transition ${
+					visible
+						? "text-slate-400 hover:bg-slate-100 hover:text-blue-500"
+						: "text-slate-300 hover:bg-slate-100 hover:text-slate-500"
+				}`}
+				title={visible ? "隐藏区块" : "显示区块"}
+				aria-label={visible ? "隐藏区块" : "显示区块"}
+				aria-pressed={visible}
+			>
+				{visible ? <Eye size={14} /> : <EyeOff size={14} />}
+			</button>
+		);
 	};
 
 	const renderSectionOrderButton = (key: SectionKey, active: boolean) => (
@@ -510,7 +599,9 @@ const ResumeEditor = ({
 			className={`flex min-w-0 flex-1 items-center gap-2 rounded-md border px-2.5 py-2 text-left transition ${
 				active
 					? "border-blue-200 bg-blue-50 text-blue-700"
-					: "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
+					: data.sectionVisibility[key]
+						? "border-transparent bg-slate-50 text-slate-600 hover:border-slate-200 hover:bg-white"
+						: "border-transparent bg-slate-50/50 text-slate-400 hover:border-slate-200 hover:bg-white"
 			}`}
 			aria-pressed={active}
 		>
@@ -594,41 +685,43 @@ const ResumeEditor = ({
 						{data.sectionOrder.length}
 					</span>
 				}
-				>
-					<div className="hidden sm:block">
-						<DndContext
-							sensors={dndSensors}
-							collisionDetection={closestCenter}
-							onDragEnd={handleSectionDragEnd}
+			>
+				<div className="hidden sm:block">
+					<DndContext
+						sensors={dndSensors}
+						collisionDetection={closestCenter}
+						onDragEnd={handleSectionDragEnd}
+					>
+						<SortableContext
+							items={data.sectionOrder}
+							strategy={verticalListSortingStrategy}
 						>
-							<SortableContext
-								items={data.sectionOrder}
-								strategy={verticalListSortingStrategy}
-							>
-								<div className="space-y-1.5">
-									{data.sectionOrder.map((key) => {
-										const active = key === activeSection;
-										return (
-											<SortableItemWithHandle key={key} id={key}>
-												{(dragHandle) => (
-													<div className="group flex items-center gap-1.5">
-														<DragHandle {...dragHandle} />
-														{renderSectionOrderButton(key, active)}
-													</div>
-												)}
-											</SortableItemWithHandle>
-										);
-									})}
-								</div>
-							</SortableContext>
-						</DndContext>
-					</div>
-					<div className="space-y-1.5 sm:hidden">
-						{data.sectionOrder.map((key, index) => {
+							<div className="space-y-1.5">
+								{data.sectionOrder.map((key) => {
+									const active = key === activeSection;
+									return (
+										<SortableItemWithHandle key={key} id={key}>
+											{(dragHandle) => (
+												<div className="group flex items-center gap-1.5">
+													<DragHandle {...dragHandle} />
+													{renderSectionOrderButton(key, active)}
+													{renderSectionVisibilityButton(key)}
+												</div>
+											)}
+										</SortableItemWithHandle>
+									);
+								})}
+							</div>
+						</SortableContext>
+					</DndContext>
+				</div>
+				<div className="space-y-1.5 sm:hidden">
+					{data.sectionOrder.map((key, index) => {
 							const active = key === activeSection;
 							return (
 								<div key={key} className="group flex items-center gap-1.5">
 									{renderSectionOrderButton(key, active)}
+									{renderSectionVisibilityButton(key)}
 									<div className="flex shrink-0 gap-0.5">
 										<button
 											type="button"
@@ -655,9 +748,9 @@ const ResumeEditor = ({
 							);
 						})}
 					</div>
-					<label className="mt-3 flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
-						<span className="flex items-center gap-2">
-							<span className="text-slate-400">
+				<label className="mt-3 flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+					<span className="flex items-center gap-2">
+						<span className="text-slate-400">
 							{sectionIconNodes[activeSection]}
 						</span>
 						<span>标题图标</span>
@@ -1098,6 +1191,167 @@ const ResumeEditor = ({
 		</PanelBlock>
 	);
 
+	const renderSectionEntryEditor = ({
+		section,
+		addTitle,
+		emptyText,
+		titleLabel,
+		subtitleLabel,
+		titlePlaceholder,
+		subtitlePlaceholder,
+		addTemplate,
+	}: {
+		section: "awards" | "campus";
+		addTitle: string;
+		emptyText: string;
+		titleLabel: string;
+		subtitleLabel: string;
+		titlePlaceholder: string;
+		subtitlePlaceholder: string;
+		addTemplate: Omit<SectionEntry, "id">;
+	}) => {
+		const items = data[section];
+
+		return (
+			<PanelBlock
+				title={getSectionTitle(section)}
+				action={
+					<AddButton
+						title={addTitle}
+						onClick={() => addSectionEntry(section, addTemplate)}
+					/>
+				}
+			>
+				<DndContext
+					sensors={dndSensors}
+					collisionDetection={closestCenter}
+					onDragEnd={handleItemsDragEnd(items, section)}
+				>
+					<SortableContext
+						items={items.map((item) => item.id)}
+						strategy={verticalListSortingStrategy}
+					>
+						<div className="space-y-3">
+							{items.map((item, index) => (
+								<SortableItemWithHandle key={item.id} id={item.id}>
+									{(dragHandle) => (
+										<div className="group border-t border-slate-100 px-1 py-3 first:border-t-0">
+											<div className="mb-2 flex items-center justify-between gap-2">
+												<div className="flex min-w-0 items-center gap-1">
+													<DragHandle {...dragHandle} />
+													<span className="min-w-0 truncate text-xs font-medium text-slate-400">
+														{item.title || `${getSectionTitle(section)} ${index + 1}`}
+													</span>
+												</div>
+												<ItemActions
+													index={index}
+													total={items.length}
+													onMove={(direction) =>
+														moveSectionEntry(section, index, direction)
+													}
+													onRemove={() =>
+														removeSectionEntry(section, item.id)
+													}
+												/>
+											</div>
+											<div className="pl-8">
+												<InputGroup
+													label={titleLabel}
+													value={item.title}
+													onChange={(value) =>
+														updateSectionEntry(section, item.id, "title", value)
+													}
+													placeholder={titlePlaceholder}
+												/>
+												<div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
+													<InputGroup
+														label={subtitleLabel}
+														value={item.subtitle}
+														onChange={(value) =>
+															updateSectionEntry(
+																section,
+																item.id,
+																"subtitle",
+																value,
+															)
+														}
+														placeholder={subtitlePlaceholder}
+													/>
+													<InputGroup
+														label="时间"
+														value={item.date}
+														onChange={(value) =>
+															updateSectionEntry(section, item.id, "date", value)
+														}
+														placeholder="例：2024.06"
+													/>
+												</div>
+												<InputGroup
+													type="textarea"
+													label="详情"
+													value={item.details}
+													onChange={(value) =>
+														updateSectionEntry(section, item.id, "details", value)
+													}
+													placeholder="每行一条亮点"
+												/>
+											</div>
+										</div>
+									)}
+								</SortableItemWithHandle>
+							))}
+							{items.length === 0 && (
+								<EmptyState
+									text={emptyText}
+									action={
+										<AddButton
+											title={addTitle}
+											onClick={() => addSectionEntry(section, addTemplate)}
+										/>
+									}
+								/>
+							)}
+						</div>
+					</SortableContext>
+				</DndContext>
+			</PanelBlock>
+		);
+	};
+
+	const renderAwardsEditor = () =>
+		renderSectionEntryEditor({
+			section: "awards",
+			addTitle: "添加奖项",
+			emptyText: "暂无获奖奖励",
+			titleLabel: "奖项",
+			subtitleLabel: "颁发方",
+			titlePlaceholder: "例：优秀毕业设计",
+			subtitlePlaceholder: "例：学校 / 赛事组委会",
+			addTemplate: {
+				title: "新奖项",
+				subtitle: "颁发方",
+				date: "时间",
+				details: "",
+			},
+		});
+
+	const renderCampusEditor = () =>
+		renderSectionEntryEditor({
+			section: "campus",
+			addTitle: "添加校园经历",
+			emptyText: "暂无校园经历",
+			titleLabel: "组织 / 活动",
+			subtitleLabel: "角色",
+			titlePlaceholder: "例：校学生会 / 创新实验室",
+			subtitlePlaceholder: "例：负责人",
+			addTemplate: {
+				title: "新校园经历",
+				subtitle: "角色",
+				date: "时间",
+				details: "",
+			},
+		});
+
 	const renderOtherEditor = () => (
 		<PanelBlock title={getSectionTitle("other")}>
 			<textarea
@@ -1126,6 +1380,10 @@ const ResumeEditor = ({
 				return renderProjectsEditor();
 			case "education":
 				return renderEducationEditor();
+			case "awards":
+				return renderAwardsEditor();
+			case "campus":
+				return renderCampusEditor();
 			case "other":
 				return renderOtherEditor();
 		}

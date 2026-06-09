@@ -5,8 +5,10 @@ import {
 	Code2,
 	FolderGit2,
 	GraduationCap,
+	Award,
 	Link2,
 	List,
+	School,
 	Tags,
 } from "lucide-react";
 import { useState } from "react";
@@ -39,6 +41,8 @@ const sectionFallbackNames: Record<SectionKey, string> = {
 	experience: "工作经历",
 	projects: "项目经历",
 	education: "教育背景",
+	awards: "获奖奖励",
+	campus: "校园经历",
 	other: "其他",
 };
 
@@ -47,6 +51,8 @@ const sectionIconNodes: Record<SectionKey, ReactNode> = {
 	experience: <BriefcaseBusiness size={14} />,
 	projects: <FolderGit2 size={14} />,
 	education: <GraduationCap size={14} />,
+	awards: <Award size={14} />,
+	campus: <School size={14} />,
 	other: <List size={14} />,
 };
 
@@ -349,6 +355,9 @@ const ResumeDisplayPreferencesEditor = ({
 						/>
 					</PreferenceBlock>
 				);
+			case "awards":
+			case "campus":
+				return null;
 			case "other":
 				return (
 					<PreferenceBlock
